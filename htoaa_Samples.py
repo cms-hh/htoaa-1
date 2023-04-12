@@ -2,9 +2,6 @@
 from collections import OrderedDict as OD
 
 kData = "Data" # dict key for Datasets
-kQCD_bEnrich = "QCD_bEnrich"
-kQCD_bGen = "QCD_bGen"
-kQCDIncl = "QCDIncl"
 
 Samples2018 = OD([
 
@@ -21,7 +18,7 @@ Samples2018 = OD([
         "JetHT_Run2018D"
     ]),
     
-    (kQCD_bEnrich,[
+    ("QCD_bEnrich",[
         "QCD_bEnriched_HT100to200_TuneCP5_13TeV-madgraph-pythia8",
         "QCD_bEnriched_HT200to300_TuneCP5_13TeV-madgraph-pythia8",
         "QCD_bEnriched_HT300to500_TuneCP5_13TeV-madgraph-pythia8",
@@ -32,7 +29,7 @@ Samples2018 = OD([
         "QCD_bEnriched_HT2000toInf_TuneCP5_13TeV-madgraph-pythia8"
     ]),
 
-    (kQCD_bGen,[
+    ("QCD_bGen",[
         "QCD_HT100to200_BGenFilter_TuneCP5_13TeV-madgraph-pythia8",
         "QCD_HT200to300_BGenFilter_TuneCP5_13TeV-madgraph-pythia8",
         "QCD_HT300to500_BGenFilter_TuneCP5_13TeV-madgraph-pythia8",
@@ -43,7 +40,7 @@ Samples2018 = OD([
         "QCD_HT2000toInf_BGenFilter_TuneCP5_13TeV-madgraph-pythia8"
     ]),
 
-    (kQCDIncl,[
+    ("QCDIncl",[
         "QCD_HT50to100_TuneCP5_13TeV-madgraphMLM-pythia8",
         "QCD_HT100to200_TuneCP5_13TeV-madgraphMLM-pythia8",
         "QCD_HT200to300_TuneCP5_13TeV-madgraphMLM-pythia8",
@@ -89,5 +86,19 @@ Samples2018 = OD([
     ("SUSY_GluGluH_01J_HToAATo4B", [
         #"SUSY_GluGluH_01J_HToAATo4B_M-20_TuneCP5_13TeV_madgraph_pythia8",
         "SUSY_GluGluH_01J_HToAATo4B_Pt150_M-20_TuneCP5_13TeV_madgraph_pythia8"
+    ]),
+    
+    ("SUSY_WH_WToAll_HToAATo4B", [
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-12_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-30_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-15_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-20_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-25_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-35_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-40_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-45_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-50_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-55_TuneCP5_13TeV_madgraph_pythia8",
+        "SUSY_WH_WToAll_HToAATo4B_Pt150_M-60_TuneCP5_13TeV_madgraph_pythia8"
     ])
 ])
