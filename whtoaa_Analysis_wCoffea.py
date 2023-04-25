@@ -54,7 +54,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         cutFlow_axis  = hist.Bin("CutFlow",   r"Cuts",            21, -0.5, 20.5)
         pt_axis       = hist.Bin("Pt",        r"$p_{T}$ [GeV]",   200, 0, 1000)
         mass_axis     = hist.Bin("Mass",      r"$m$ [GeV]",       300, 0, 300)
-        mlScore_axis  = hist.Bin("MLScore",   r"ML score",        100, -1.1, 1.1)
+        mlScore_axis  = hist.Bin("MLScore",   r"ML score",        100, 0., 1.)
         sXaxis      = 'xAxis'
         sXaxisLabel = 'xAxisLabel'
         sYaxis      = 'yAxis'
@@ -104,7 +104,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
 
     def process(self, events):
         dataset = events.metadata["dataset"] # dataset label
-        print('dataset: ', dataset)
         self.datasetInfo[dataset]['isSignal'] = False
         self.datasetInfo[dataset]['isQCD'] = False
 
@@ -186,7 +185,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 #"leadingeleEta",
                 #"leadingmuEta",
                 "FatJet",
-                #"lep"
+                "lep"
                 #"L1_SingleJet180",
                 #HLT_AK8PFJet330_name
             ]),
@@ -194,9 +193,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         # reconstruction level cuts for cut-flow table. Order of cuts is IMPORTANT
         cuts_reco = ["dR_LeadingFatJet_GenB_0p8"] + sel_names_all["SR"] #.copy()
         selection = PackedSelection()
-        print('be4')
         FatJet = self.objectSelector.selectFatJets(events)
-        print(FatJet)
         ele = self.objectSelector.selectElectrons(events)
         mu = self.objectSelector.selectMuons(events)
         lep = ak.with_name(
@@ -206,13 +203,16 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         # this will help us later in composing the boolean selections easily
         if self.datasetInfo[dataset]['isMC'] and self.datasetInfo[dataset]['isSignal']:
             sel_names_GEN = ["1GenHiggs", "2GenA", "2GenAToBBbarPairs", "dR_GenH_GenB_0p8"]
-            print('fatjet', '\t', LVGenB_0)
             FatJet = FatJet[(FatJet.delta_r(LVGenB_0) <0.8)
                             & (FatJet.delta_r(LVGenB_1) <0.8)
                             & (FatJet.delta_r(LVGenBbar_0) < 0.8)
                             & (FatJet.delta_r(LVGenBbar_1) < 0.8)
             ]
-            print('after', FatJet)
+            selection.add("1GenHiggs", ak.num(genHiggs) == 1)
+            selection.add("2GenA", ak.num(genACollection) == 2)
+            selection.add("2GenAToBBbarPairs", ak.num(genBBar_pairs) == 2)
+
+        FatJet = FatJet[ak.all(FatJet.metric_table(lep)>0.8, axis=-1)]
         if "nPV" in sel_names_all["SR"]:
             selection.add("nPV", events.PV.npvsGood >= 1)
         if "FatJet" in sel_names_all["SR"]:
@@ -222,9 +222,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             )
         if 'lep' in sel_names_all["SR"]:
             selection.add("lep", ak.num(lep) >=1)
-        selection.add("1GenHiggs", ak.num(genHiggs) == 1)
-        selection.add("2GenA", ak.num(genACollection) == 2)
-        selection.add("2GenAToBBbarPairs", ak.num(genBBar_pairs) == 2)
         # useful debugger for selection efficiency
         sel_SR           = selection.all(* sel_names_all["SR"])
         ################
@@ -273,7 +270,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 systList = [shift_syst]
         else:
             systList = ["noweight"]
-        systList = ["noweight"]
+        #systList = ["noweight"]
             
         output['cutflow']['all events'] += len(events)
         output['cutflow'][sWeighted+'all events'] += weights.weight().sum()
@@ -303,7 +300,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             for ibin, cut in enumerate(allcuts):
                 cuts.append(cut)
                 n = selection.all(*cuts).sum()
-                print('n: ', n)
                 n = np.ones(n)
                 output['hCutFlow'].fill(
                     dataset=dataset,
@@ -322,7 +318,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 systematic=syst,
                 weight=evtWeight[sel_SR]
             )
-            print('len: ', ak.num(FatJet[sel_SR]))
             output['hFatJetlen'].fill(
                 dataset=dataset,
                 CutFlow=(ak.num(FatJet[sel_SR])),
@@ -366,7 +361,7 @@ if __name__ == '__main__':
     lumiScale = 1
     sInputFiles         = config["inputFiles"]
     sOutputFile         = config["outputFile"]
-    sample_category     = config['sampleCategory']
+    sample_category     = config['process_name']
     isMC                = config["isMC"]
     era                 = config['era']
     if isMC:
@@ -436,12 +431,8 @@ if __name__ == '__main__':
                 #print(f"1: key {key}, value ({type(value)})     Hist: {type(hist.Hist)},    isinstance(value, hist.Hist): {isinstance(value, hist.Hist)}") # value: {value}")
 
                 for _dataset in value.axis('dataset').identifiers():
-                    print(f"_dataset ({type(_dataset)}): {_dataset}")
-                    print('syst: ', value.axis('systematic'))
                     for _syst in value.axis('systematic').identifiers():
-                        print('_syst: ', _syst, '\t', _dataset)
                         h1 = value.integrate('dataset',_dataset).integrate('systematic',_syst).to_hist()
-                        print(f"h1 ({type(h1)}), '\t', {value.integrate('dataset',_dataset).integrate('systematic',_syst)}")
                         fOut['%s/%s_%s' % (sDir1, key, _syst)] = h1
     current_memory, peak_memory = tracemalloc.get_traced_memory() # https://medium.com/survata-engineering-blog/monitoring-memory-usage-of-a-running-python-program-49f027e3d1ba
     print(f"\n\nMemory usage:: current {current_memory / 10**6}MB;  peak {peak_memory / 10**6}MB")
