@@ -64,10 +64,6 @@ Samples2018 = OD([
 #        "QCD_HT2000toInf_TuneCP5_PSWeights_13TeV-madgraph-pythia8",
 #     ]),
 
-    ("TTJets", [
-        "TTJets_TuneCP5_13TeV-amcatnloFXFX-pythia8"
-    ]),
-
     ("ZJets", [
         "ZJetsToQQ_HT-200to400_TuneCP5_13TeV-madgraphMLM-pythia8",
         "ZJetsToQQ_HT-400to600_TuneCP5_13TeV-madgraphMLM-pythia8",
@@ -100,5 +96,21 @@ Samples2018 = OD([
         "SUSY_WH_WToAll_HToAATo4B_Pt150_M-50_TuneCP5_13TeV_madgraph_pythia8",
         "SUSY_WH_WToAll_HToAATo4B_Pt150_M-55_TuneCP5_13TeV_madgraph_pythia8",
         "SUSY_WH_WToAll_HToAATo4B_Pt150_M-60_TuneCP5_13TeV_madgraph_pythia8"
+    ]),
+
+    ('WJetsToLNu_HT', [
+        "WJetsToLNu_HT-200To400_TuneCP5_13TeV-madgraphMLM-pythia8",
+        "WJetsToLNu_HT-400To600_TuneCP5_13TeV-madgraphMLM-pythia8",
+        "WJetsToLNu_HT-600To800_TuneCP5_13TeV-madgraphMLM-pythia8",
+        "WJetsToLNu_HT-800To1200_TuneCP5_13TeV-madgraphMLM-pythia8",
+        "WJetsToLNu_HT-1200To2500_TuneCP5_13TeV-madgraphMLM-pythia8",
+        "WJetsToLNu_HT-2500ToInf_TuneCP5_13TeV-madgraphMLM-pythia8",
+        "WJetsToLNu_HT-100To200_TuneCP5_13TeV-madgraphMLM-pythia8"
+    ]),
+
+    ("TT", [
+        "TTJets_TuneCP5_13TeV-amcatnloFXFX-pythia8",
+        "TTJets_SingleLeptFromTbar_TuneCP5_13TeV-madgraphMLM-pythia8",
+        "TTJets_SingleLeptFromT_TuneCP5_13TeV-madgraphMLM-pythia8"
     ])
 ])
