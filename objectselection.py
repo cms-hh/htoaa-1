@@ -30,7 +30,6 @@ class ObjectSelection:
 
 
     def selectGenHiggs(self, events):
-        print('genhiggs')
         maskGenHiggs = (
             (events.GenPart.pdgId  == 25) & # pdgId:: 25: H0
             (events.GenPart.status == 62)   # statu 62: outgoing subprocess particle with primordial kT included https://pythia.org/latest-manual/ParticleProperties.html           
