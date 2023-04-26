@@ -2,9 +2,6 @@ import awkward as ak
 from coffea.nanoevents.methods import vector
 
 def genparticle(events, part, idx):
-    print('evt;')
-    print('evt: ', events.GenPart[part][:, idx].pt)
-    print('evt: ', events.GenPart[part][:, idx].eta)
     v= ak.zip(
         {
             "pt"  : events.GenPart[part][:, idx].pt,
