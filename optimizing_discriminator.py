@@ -3,7 +3,7 @@ import numpy as np
 import awkward as ak
 import sys
 f=uproot.open('hadd.root')
-bkgs = ['WJetsToLNu_HT-200To400', 'WJetsToLNu_HT-400To600', 'WJetsToLNu_HT-600To800', 'WJetsToLNu_HT-800To1200', 'WJetsToLNu_HT-1200To2500', 'WJetsToLNu_HT-2500ToInf', 'WJetsToLNu_HT-100To200', 'TTJets_SingleLeptFromTbar', 'TTJets_SingleLeptFromT']
+bkgs = ['WJets', 'TT']
 sigs = ['SUSY_WH_WToAll_HToAATo4B_Pt150_M-12', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-15', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-20', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-25', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-30', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-35', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-40', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-45', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-50', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-55', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-60']
 vars = ['hLeadingFatJetParticleNetMD_Xbb_central', 'hLeadingFatJetDeepTagMD_bbvsLight_central']
 sighist = f['evt']['SUSY_WH_WToAll_HToAATo4B_Pt150_M-12'][vars[0]]
