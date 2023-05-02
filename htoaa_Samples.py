@@ -109,7 +109,7 @@ Samples2018 = OD([
     ]),
 
     ("TT", [
-        "TTJets_TuneCP5_13TeV-amcatnloFXFX-pythia8",
+        #"TTJets_TuneCP5_13TeV-amcatnloFXFX-pythia8",
         "TTJets_SingleLeptFromTbar_TuneCP5_13TeV-madgraphMLM-pythia8",
         "TTJets_SingleLeptFromT_TuneCP5_13TeV-madgraphMLM-pythia8"
     ])
