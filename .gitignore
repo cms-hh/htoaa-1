@@ -3,6 +3,9 @@ __pycache__/
 *.log
 *.out
 *.error
+*.root
+*.pdf
+*.png
 cout*.txt
 plots/
 dataVsMCDist_tmp/
