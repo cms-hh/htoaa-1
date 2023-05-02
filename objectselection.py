@@ -81,3 +81,11 @@ class ObjectSelection:
         )
 
         return events.Electron[mask]
+
+    def selectak4Jets(self, events):
+        mask = (
+            (events.Jet.pt > 20) &
+            (events.Jet.eta < 2.4) &
+            (events.Jet.btagDeepFlavB > 0.71)
+        )
+        return events.Jet[mask]
