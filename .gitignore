@@ -6,6 +6,7 @@ __pycache__/
 *.root
 *.pdf
 *.png
+*#
 cout*.txt
 plots/
 dataVsMCDist_tmp/
