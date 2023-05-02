@@ -54,7 +54,8 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         cutFlow_axis  = hist.Bin("CutFlow",   r"Cuts",            21, -0.5, 20.5)
         pt_axis       = hist.Bin("Pt",        r"$p_{T}$ [GeV]",   200, 0, 1000)
         mass_axis     = hist.Bin("Mass",      r"$m$ [GeV]",       300, 0, 300)
-        mlScore_axis  = hist.Bin("MLScore",   r"ML score",        100, 0., 1.)
+        mlScore_axis  = hist.Bin("MLScore",   r"ML score",        200, 0., 1.)
+        LHE_HT_axis  = hist.Bin("LHE_HT",   r"LHE_HT",        2500, 0., 3000.)
         sXaxis      = 'xAxis'
         sXaxisLabel = 'xAxisLabel'
         sYaxis      = 'yAxis'
@@ -66,6 +67,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             ('hLeadingFatJetMSoftDrop',                   {sXaxis: mass_axis,       sXaxisLabel: r"m_{soft drop} (leading FatJet) [GeV]"}),
             ('hLeadingFatJetParticleNetMD_Xbb',           {sXaxis: mlScore_axis,    sXaxisLabel: r"LeadingFatJetParticleNetMD_Xbb"}),
             ('hLeadingFatJetDeepTagMD_bbvsLight',         {sXaxis: mlScore_axis,    sXaxisLabel: r"LeadingFatJetDeepTagMD_bbvsLight"}),
+            ('LHE_HT',                                    {sXaxis: LHE_HT_axis,    sXaxisLabel: r"LHE_HT"})
         ])
         self._accumulator = processor.dict_accumulator({
             'cutflow': processor.defaultdict_accumulator(int)
@@ -180,20 +182,17 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         sel_names_all = OD([
             ("SR",                    [
                 "nPV",
-                #"leadingelePt",
-                #"leadingmuPt",
-                #"leadingeleEta",
-                #"leadingmuEta",
                 "FatJet",
-                "lep"
-                #"L1_SingleJet180",
-                #HLT_AK8PFJet330_name
+                "lep",
+                "met"
+                #"ak4Jet"
             ]),
         ])
         # reconstruction level cuts for cut-flow table. Order of cuts is IMPORTANT
         cuts_reco = ["dR_LeadingFatJet_GenB_0p8"] + sel_names_all["SR"] #.copy()
         selection = PackedSelection()
         FatJet = self.objectSelector.selectFatJets(events)
+        ak4Jet = self.objectSelector.selectak4Jets(events)
         ele = self.objectSelector.selectElectrons(events)
         mu = self.objectSelector.selectMuons(events)
         lep = ak.with_name(
@@ -222,6 +221,10 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             )
         if 'lep' in sel_names_all["SR"]:
             selection.add("lep", ak.num(lep) >=1)
+        if 'met' in sel_names_all["SR"]:
+            selection.add("met", events.MET.pt>20)
+        if 'ak4Jet' in sel_names_all["SR"]:
+            selection.add("ak4Jet", ak.num(ak4Jet) <1)
         # useful debugger for selection efficiency
         sel_SR           = selection.all(* sel_names_all["SR"])
         ################
@@ -312,6 +315,12 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 systematic=syst,
                 weight=evtWeight[sel_SR]
             )
+            output['LHE_HT'].fill(
+                dataset=dataset,
+                LHE_HT=(events.LHE.HT),
+                systematic=syst,
+                weight=evtWeight_gen
+            )
             output['hLeadingFatJetMSoftDrop'].fill(
                 dataset=dataset,
                 Mass=(ak.flatten(FatJet.msoftdrop[sel_SR][:, 0:1])),
@@ -361,7 +370,7 @@ if __name__ == '__main__':
     lumiScale = 1
     sInputFiles         = config["inputFiles"]
     sOutputFile         = config["outputFile"]
-    sample_category     = config['process_name']
+    sample_category     = config['sampleCategory']
     isMC                = config["isMC"]
     era                 = config['era']
     if isMC:
