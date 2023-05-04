@@ -1,4 +1,3 @@
-
 import os
 import sys
 import json
@@ -15,10 +14,6 @@ from htoaa_Samples import (
     Samples2018,
     kData
 )
-
-
-
-
 
 sAnalysis         = "whtoaa_Analysis_wCoffea.py"  # "htoaa_Analysis.py"
 sConfig           = "config_htoaa.json"
@@ -142,9 +137,6 @@ def searchStringInFile(sFileName, searchString, nLinesToSearch, SearchFromEnd=Tr
             break
 
     return searchStringFound
-            
-        
-
 
 if __name__ == '__main__':
 
@@ -160,6 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('-ResubWaitingTime',  type=int, default=15, help='Resubmit failed jobs after every xx minutes')
     parser.add_argument('-iJobSubmission',    type=int, default=0,  help='Job submission iteration. Specify previous last job submittion iteration if script terminated for some reason.')
     parser.add_argument('-dryRun',            action='store_true', default=False)
+    parser.add_argument('-rf', '--run_file',    type=str, default='analysis', choices=['analysis', 'count_genweight'])
     args=parser.parse_args()
     print("args: {}".format(args))
 
@@ -172,6 +165,9 @@ if __name__ == '__main__':
     ResubWaitingTime = args.ResubWaitingTime
     iJobSubmission   = args.iJobSubmission
     dryRun           = args.dryRun
+    run_file = args.run_file
+    if run_file == 'count_genweight':
+        sAnalysis        = 'countSumEventsInSample.py'
 
     pwd = os.getcwd()
     DestinationDir = "./%s" % (anaVersion)
@@ -188,7 +184,7 @@ if __name__ == '__main__':
         fRunCommand.write('%s    %s \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), sCommand))
 
 
-
+    do_hadd = False
     samplesList = None
     samplesInfo = None
     Luminosity  = None
@@ -213,48 +209,26 @@ if __name__ == '__main__':
         
         for dbsname, sampleInfo in samplesInfo.items():
                 sample_category = sampleInfo['sample_category']
-            #for sample in samples:
                 if len(selSamplesToRun_list) > 0:
                     skipThisSample = True
                     for selSample in selSamplesToRun_list:
-                        #if sample.startswith(selSample): skipThisSample = False
                         if selSample in sample_category: skipThisSample = False
                     if skipThisSample:
                         continue
 
-                        #print(f"sample_category: {sample_category}, sample: {sample}")
-
-                #sampleInfo = samplesInfo[sample]
                 fileList = sampleInfo[sampleFormat]
                 files = []
                 for iEntry in fileList:
-                    # file name with wildcard charecter *
                     if "*" in iEntry:  files.extend( glob.glob( iEntry ) )
                     else:              files.append( iEntry )
                 sample_cossSection = sampleInfo["cross_section"] if (sample_category != kData) else None
                 sample_nEvents     = sampleInfo["nEvents"]
                 sample_sumEvents   = sampleInfo["sumEvents"] if (sample_category != kData) else None
 
-                if printLevel >= 6:
-                    print("\nsample: {}".format(sample))
-                    print("samplesInfo[sample]: {}".format(samplesInfo[sample]))
-                    print("files ({}): {}".format(len(files), files))
-
-
                 nSplits = int(len(files) / nFilesPerJob) if nFilesPerJob > 0 else 1
                 nSplits = 1 if nSplits==0 else nSplits
 
                 files_splitted = np.array_split(files, nSplits)
-                if printLevel >= 6:
-                    print("files_splitted: {}".format(files_splitted))
-                '''        
-                files_splitted = []
-                for iSplit in range(nSplits):
-                    idxStart = iSplit*nFilesPerJob
-                    idxEnd   = idxStart + nFilesPerJob if iSplit < (nSplits - 1) else None
-                    files_splitted.append( files[ idxStart : idxEnd ]  )
-                print("files_splitted: {}".format(files_splitted))
-                '''
                 process_name = sampleInfo['process_name']
                 for iJob in range(len(files_splitted)):
                     #config = config_Template.deepcopy()
@@ -400,12 +374,6 @@ if __name__ == '__main__':
                         # job is either running or succeeded
                         continue
 
-                    '''
-                    if jobStatus in [3]:
-                        # job failed, but failure reason needs investigation
-                        continue
-                    '''
-                    
                     if run_mode == 'condor':
                         cmd1 = "condor_submit %s" % sCondorSubmit_to_use 
                         print("Now:  %s " % cmd1)
@@ -413,10 +381,6 @@ if __name__ == '__main__':
                             os.system(cmd1)
                     else:
                         pass
-
-                    
-
-
         # write JobSubmission status report in JobSubLog file
         with open(sFileJobSubLog, 'a') as fJobSubLog:
             fJobSubLog.write('%s \t iJobSubmission %d \t OpRootFiles_Target (%d):  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission, len(OpRootFiles_Target)))
@@ -438,12 +402,10 @@ if __name__ == '__main__':
                         fJobSubLog.write('\t\t %s \n' % (f))
                 
             fJobSubLog.write('%s\n\n\n' % ('-'*10))
-        
 
         jobStatus_list = [ (jobStatus, len(jobStatus_dict[jobStatus])) for jobStatus in jobStatus_dict.keys() ]
         print('\n\n\n%s \t iJobSubmission %d \t OpRootFiles_Exist %d out of %d. No. of jobs submitted in this resubmission: %d:  ' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission, len(OpRootFiles_Exist), len(OpRootFiles_Target), len(OpRootFiles_iJobSubmission)))
         print(f"jobStatus_list: {jobStatus_list} \n"); sys.stdout.flush()
-        
             
         if dryRun:
             print('%s \t druRun with iJobSubmission: %d  \nTerminating...\n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
@@ -452,11 +414,18 @@ if __name__ == '__main__':
         if len(OpRootFiles_Target) == len(OpRootFiles_Exist):
             break
         else:
+            do_hadd = True
             time.sleep( ResubWaitingTime * 60 )
             iJobSubmission += 1
-
 
     with open(sFileJobSubLog, 'a') as fJobSubLog:
         fJobSubLog.write('%s \t Jobs are done. iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
     print('%s \t Jobs are done. iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
 
+if do_hadd:
+    if run_file == 'count_genweight':
+        outputfile = 'hadd_countgenWeight.root'
+    else:
+        outputfile = 'hadd.root'
+    cmd = f'python3 hadd.py -p {DestinationDir} -o {outputfile}'
+    os.system(cmd)
