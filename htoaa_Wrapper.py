@@ -20,7 +20,7 @@ from htoaa_Samples import (
 
 
 
-sAnalysis         = "whtoaa_Analysis_wCoffea_v1.py"  # "htoaa_Analysis.py"
+sAnalysis         = "whtoaa_Analysis_wCoffea.py"  # "htoaa_Analysis.py"
 sConfig           = "config_htoaa.json"
 sRunCommandFile   = "1_RunCommand.txt"
 sJobSubLogFile    = "1_JobSubmission.log"
@@ -176,7 +176,7 @@ if __name__ == '__main__':
     pwd = os.getcwd()
     DestinationDir = "./%s" % (anaVersion)
     if   "/home/siddhesh/" in pwd: DestinationDir = "/home/siddhesh/Work/CMS/htoaa/analysis/%s" % (anaVersion)
-    elif "/afs/cern.ch/"   in pwd: DestinationDir = "/afs/cern.ch/work/s/snandan/public/haato4b/htoaa/%s" % (anaVersion)
+    elif "/afs/cern.ch/"   in pwd: DestinationDir = "/afs/cern.ch/work/s/snandan/public/myforkhtoaa/htoaa-1/%s" % (anaVersion)
     sFileRunCommand = "%s/%s" % (DestinationDir, sRunCommandFile)
     sFileJobSubLog  = "%s/%s" % (DestinationDir, sJobSubLogFile)
     if not os.path.exists(DestinationDir): os.mkdir( DestinationDir )
@@ -265,13 +265,14 @@ if __name__ == '__main__':
                     files_splitted.append( files[ idxStart : idxEnd ]  )
                 print("files_splitted: {}".format(files_splitted))
                 '''
+                process_name = sampleInfo['process_name']
                 for iJob in range(len(files_splitted)):
                     #config = config_Template.deepcopy()
                     config = copy.deepcopy(config_Template)
 
                     # Job related files
                     sOpRootFile_to_use    = '%s/%s' % (DestinationDir, sOpRootFile)
-                    sOpRootFile_to_use    = sOpRootFile_to_use.replace('$SAMPLE', sample)
+                    sOpRootFile_to_use    = sOpRootFile_to_use.replace('$SAMPLE', process_name)
                     sOpRootFile_to_use    = sOpRootFile_to_use.replace('$STAGE', str(0))
                     sOpRootFile_to_use    = sOpRootFile_to_use.replace('$IJOB', str(iJob))
 
