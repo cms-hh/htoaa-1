@@ -202,16 +202,6 @@ if __name__ == '__main__':
     if selSamplesToRun:
         selSamplesToRun_list = selSamplesToRun.split(',')
 
-    print("samplesList: {}".format(samplesList))
-    #print("\n\nsamplesInfo: {}".format(samplesInfo))
-    print(f"\n\nselSamplesToRun_list: {selSamplesToRun_list}")
-
-
-    #config = config_Template
-
-
-    #iJobSubmission = 0
-    
     while iJobSubmission <= nResubmissionMax:
 
         print('\n\n%s \t Startiing iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
@@ -221,20 +211,20 @@ if __name__ == '__main__':
         OpRootFiles_iJobSubmission = []
         jobStatus_dict             = {} # OD([])
         
-        for sample_category, samples in samplesList.items():
-            print('sample_category', sample_category)
-            #print("sample_category {}, samples {}".format(sample_category, samples))
-            for sample in samples:
+        for dbsname, sampleInfo in samplesInfo.items():
+                sample_category = sampleInfo['sample_category']
+            #for sample in samples:
                 if len(selSamplesToRun_list) > 0:
                     skipThisSample = True
                     for selSample in selSamplesToRun_list:
-                        if sample.startswith(selSample): skipThisSample = False
+                        #if sample.startswith(selSample): skipThisSample = False
+                        if selSample in sample_category: skipThisSample = False
                     if skipThisSample:
                         continue
 
-                print(f"sample_category: {sample_category}, sample: {sample}")
+                        #print(f"sample_category: {sample_category}, sample: {sample}")
 
-                sampleInfo = samplesInfo[sample]
+                #sampleInfo = samplesInfo[sample]
                 fileList = sampleInfo[sampleFormat]
                 files = []
                 for iEntry in fileList:
@@ -292,10 +282,6 @@ if __name__ == '__main__':
                     isCondorOutputExist  = os.path.isfile(sCondorOutput_to_use)
                     isCondorErrorExist   = os.path.isfile(sCondorError_to_use)
 
-                    if printLevel >= 3:
-                        print(f"sOpRootFile_to_use: {sOpRootFile_to_use} ")
-                    
-                    # JobStatus
                     jobStatus = -1
                     jobStatusForJobSubmission = [0, 3, 4, 5]
 
@@ -368,16 +354,13 @@ if __name__ == '__main__':
                         jobStatus_dict[jobStatus].append(sOpRootFile_to_use)
                     
 
-                    if printLevel >= 0:
-                        print(f"\t {sOpRootFile_to_use}:: jobStatus: {jobStatus}, isConfigExist: {isConfigExist}, isOpRootFileExist: {isOpRootFileExist}, isCondorExecExist: {isCondorExecExist}, isCondorSubmitExist: {isCondorSubmitExist}, isCondorLogExist: {isCondorLogExist}, isCondorOutputExist: {isCondorOutputExist}, isCondorErrorExist: {isCondorErrorExist}"); sys.stdout.flush()
-                        
-
                     #if iJobSubmission == 0:
                     if jobStatus == 0:
                         config["era"] = era
                         config["inputFiles"] = list( files_splitted[iJob] )
                         config["outputFile"] = sOpRootFile_to_use 
                         config["sampleCategory"] = sample_category
+                        config['process_name'] = process_name
                         config["isMC"] = (sample_category != kData)
                         #config["Luminosity"] = Luminosity
                         config["nEvents"] = sample_nEvents
@@ -389,7 +372,6 @@ if __name__ == '__main__':
                             del config["sumEvents"]
 
 
-                        print("config {}: {}".format(sConfig_to_use, config))
                         with open(sConfig_to_use, "w") as fConfig:
                             json.dump( config,  fConfig, indent=4)
 
