@@ -23,6 +23,46 @@ sOpRootFile       = "analyze_htoaa_$SAMPLE_$STAGE_$IJOB.root"
 
 printLevel = 3
 
+def check_sample(proc, samples_sum):
+        for sample_sum in samples_sum:
+                if proc in sample_sum[0]:
+                        print(f'{proc} found on {sample_sum[0]}')
+                        return (True, sample_sum[1])
+        return (False, 0)
+
+def calculate_samples_sum_event(samplesInfo):
+    samples_sum = []
+    for idx1, sample_info in enumerate(samplesInfo):
+        #samplesInfo[sample_info]['sumEvents'] = get_histvalue(samplesInfo[sample_info]['process_name'])
+        proc = samplesInfo[sample_info]['process_name']
+        proc_1_mod = proc.lower()
+        sample_exist = check_sample(proc, samples_sum)
+        if sample_exist[0]: continue
+        sample_sum = []
+        gensum = 0
+        for idx2, sample_info_2 in enumerate(samplesInfo):
+                if not (idx2 > idx1): continue
+                add_sample = False
+                proc_2 = samplesInfo[sample_info_2]['process_name']
+                proc_2_mod = proc_2.lower()
+                if proc_1_mod == proc_2_mod:
+                        add_sample = True
+                else:
+                        proc_2_mod = proc_2_mod.split('_psweights')[0]
+                        proc_2_mod = proc_2_mod.split('_ext')[0]
+                        proce_1_mod = proc_1_mod.split('_psweights')[0]
+                        proce_1_mod = proc_1_mod.split('_ext')[0]
+                        if proc_2_mod == proc_1_mod:
+                                add_sample = True
+                if add_sample:
+                        if len(sample_sum) == 0:
+                                sample_sum.append(proc)
+                                gensum += samplesInfo[sample_info]['sumEvents']
+                        sample_sum.append(proc_2)
+                        gensum += samplesInfo[sample_info_2]['sumEvents']
+        if len(sample_sum): samples_sum.append([sample_sum, gensum])
+    return samples_sum
+
 def writeCondorExecFile(condor_exec_file, sConfig_to_use):
     if not os.path.isfile(condor_exec_file):    
         with open(condor_exec_file, 'w') as f:
@@ -44,16 +84,14 @@ def writeCondorExecFile(condor_exec_file, sConfig_to_use):
             f.write("source /afs/cern.ch/user/s/snandan/.bashrc \n")
             f.write("which conda \n")
             f.write("time conda env list \n")
-            f.write("conda activate ana_htoaa \n")
+            f.write("conda activate myEnv \n")
             f.write("time conda env list \n")
 
             f.write("time conda list \n")
             f.write("which python3 \n")
             f.write("python3 -V \n")
             #f.write(" \n")
-            f.write("conda activate ana_htoaa \n")
-            #f.write("time python3 %s/%s  %s \n" % (pwd,sAnalysis, sConfig_to_use))
-            f.write("time /afs/cern.ch/work/s/snandan/anaconda3/envs/myEnv/bin/python3 %s/%s  %s \n" % (pwd,sAnalysis, sConfig_to_use))
+            f.write("time /afs/cern.ch/work/s/snandan/anaconda3/envs/myEnv/bin/python3 %s/%s  %s \n" % (pwd, sAnalysis, sConfig_to_use))
 
         os.system("chmod a+x %s" % condor_exec_file)
 
@@ -103,7 +141,7 @@ def writeCondorSumitFile(condor_submit_file, condor_exec_file, sCondorLog_to_use
         #f.write("x509userproxy = /afs/cern.ch/user/s/ssawant/x509up_u108989 \n")
         #f.write("use_x509userproxy = true \n")
         f.write("x509userproxy=proxy \n")
-        f.write("arguments = ${x509userproxy}  \n")        
+        f.write("arguments = $(x509userproxy)  \n")
         
         #f.write("+JobFlavour = \"longlunch\" \n")
         f.write("+JobFlavour = \"%s\" \n" % (jobFlavours[iJobFlavour]))
@@ -189,8 +227,8 @@ if __name__ == '__main__':
     samplesInfo = None
     Luminosity  = None
     if era == Era_2018:
-        samplesList = Samples2018
-        with open(sFileSamplesInfo[era]) as fSamplesInfo:
+        samplesList = 'Samples_2018UL.json'
+        with open(samplesList) as fSamplesInfo:
             samplesInfo = json.load(fSamplesInfo)
         Luminosity = Luminosities[era][0]
 
@@ -206,7 +244,8 @@ if __name__ == '__main__':
         OpRootFiles_Exist          = []
         OpRootFiles_iJobSubmission = []
         jobStatus_dict             = {} # OD([])
-        
+
+        samples_sum_events = calculate_samples_sum_event(samplesInfo)
         for dbsname, sampleInfo in samplesInfo.items():
                 sample_category = sampleInfo['sample_category']
                 if len(selSamplesToRun_list) > 0:
@@ -223,13 +262,17 @@ if __name__ == '__main__':
                     else:              files.append( iEntry )
                 sample_cossSection = sampleInfo["cross_section"] if (sample_category != kData) else None
                 sample_nEvents     = sampleInfo["nEvents"]
-                sample_sumEvents   = sampleInfo["sumEvents"] if (sample_category != kData) else None
+                process_name = sampleInfo['process_name']
+                sample_exist = check_sample(process_name, samples_sum_events)
+                if sample_exist[0]:
+                        sample_sumEvents   = sample_exist[1]
+                else:
+                        sample_sumEvents   = sampleInfo["sumEvents"] if (sample_category != kData) else None
 
                 nSplits = int(len(files) / nFilesPerJob) if nFilesPerJob > 0 else 1
                 nSplits = 1 if nSplits==0 else nSplits
 
                 files_splitted = np.array_split(files, nSplits)
-                process_name = sampleInfo['process_name']
                 for iJob in range(len(files_splitted)):
                     #config = config_Template.deepcopy()
                     config = copy.deepcopy(config_Template)
