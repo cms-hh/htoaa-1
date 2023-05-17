@@ -16,7 +16,7 @@ count = 0
 final_hadd = ''
 while dohadd:
     outputs = []
-    for idx, f in enumerate(range(0, len(files) + 1, nfiles)):
+    for idx, f in enumerate(range(0, len(files), nfiles)):
         files_tohadd = ' '.join(files[f:f+nfiles])
         output = f'hadd_{count}_{idx}.root' if len(files) > nfiles else output_file
         outputs.append(output)
