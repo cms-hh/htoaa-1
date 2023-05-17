@@ -12,6 +12,9 @@ import numpy as np
 from copy import deepcopy
 #import uproot
 import uproot3 as uproot
+from auxiliary import met_p4
+from auxiliary import top_pT_reweighting
+from metfilter import apply_metfilters
 np.set_printoptions(threshold=sys.maxsize)
 '''
 H->aa->4b boosted analysis macro
@@ -32,7 +35,7 @@ import uproot
 
 
 from htoaa_Settings import *#bTagWPs
-from htoaa_CommonTools import GetDictFromJsonFile, calculate_lumiScale, setXRootDRedirector
+from htoaa_CommonTools import GetDictFromJsonFile, calculate_lumiScale, setXRootDRedirector, xrdcpFile
 from objectselection import ObjectSelection
 from genparticle import genparticle
 
@@ -55,7 +58,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         pt_axis       = hist.Bin("Pt",        r"$p_{T}$ [GeV]",   200, 0, 1000)
         mass_axis     = hist.Bin("Mass",      r"$m$ [GeV]",       300, 0, 300)
         mlScore_axis  = hist.Bin("MLScore",   r"ML score",        200, 0., 1.)
-        LHE_HT_axis  = hist.Bin("LHE_HT",   r"LHE_HT",        2500, 0., 3000.)
+        LHE_HT_axis   = hist.Bin("LHE_HT",   r"LHE_HT",        2500, 0., 3000.)
         sXaxis      = 'xAxis'
         sXaxisLabel = 'xAxisLabel'
         sYaxis      = 'yAxis'
@@ -66,8 +69,9 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             ('hLeadingFatJetPt',                          {sXaxis: pt_axis,         sXaxisLabel: r"$p_{T}(leading FatJet)$ [GeV]"}),
             ('hLeadingFatJetMSoftDrop',                   {sXaxis: mass_axis,       sXaxisLabel: r"m_{soft drop} (leading FatJet) [GeV]"}),
             ('hLeadingFatJetParticleNetMD_Xbb',           {sXaxis: mlScore_axis,    sXaxisLabel: r"LeadingFatJetParticleNetMD_Xbb"}),
+            ('hLeadingFatJetMass',                        {sXaxis: mass_axis,       sXaxisLabel: r"leading FatJet mass [GeV]"}),
             ('hLeadingFatJetDeepTagMD_bbvsLight',         {sXaxis: mlScore_axis,    sXaxisLabel: r"LeadingFatJetDeepTagMD_bbvsLight"}),
-            ('LHE_HT',                                    {sXaxis: LHE_HT_axis,    sXaxisLabel: r"LHE_HT"})
+            ('LHE_HT_gen',                                {sXaxis: LHE_HT_axis,    sXaxisLabel: r"LHE_HT"})
         ])
         self._accumulator = processor.dict_accumulator({
             'cutflow': processor.defaultdict_accumulator(int)
@@ -80,7 +84,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 # TH1
                 self._accumulator.add({
                     histName: hist.Hist(
-                        "Counts",
+                        histName,
                         dataset_axis,
                         hXaxis,
                         systematic_axis,
@@ -109,6 +113,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         self.datasetInfo[dataset]['isSignal'] = False
         self.datasetInfo[dataset]['isQCD'] = False
 
+        events = apply_metfilters(self.datasetInfo[dataset]['isMC'], events)
         if self.datasetInfo[dataset]['isMC']:
             self.datasetInfo[dataset]['isSignal'] = True if "HToAATo4B" in dataset else False
             self.datasetInfo[dataset]['isQCD']    = True if "QCD"       in dataset else False
@@ -123,7 +128,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         return output
     
     def process_shift(self, events, shift_syst=None):
-        
+
         output = self.accumulator.identity()
         dataset = events.metadata["dataset"] # dataset label
         ##################
@@ -198,6 +203,10 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         lep = ak.with_name(
                 ak.concatenate([mu, ele], axis=1), "PtEtaPhiMCandidate"
             )
+        lep_et = np.sqrt(lep.mass * lep.mass + lep.px * lep.px + lep.py * lep.py)
+        m = met_p4(events)
+        #nu_et = np.sqrt(m.px * m.px + m.py*m.py)
+        mt_W = lep.mass * lep.mass +  2* (lep.pt*m.pt -(lep.px *m.px + lep.py * m.py))
         # create a PackedSelection object
         # this will help us later in composing the boolean selections easily
         if self.datasetInfo[dataset]['isMC'] and self.datasetInfo[dataset]['isSignal']:
@@ -220,11 +229,11 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 ak.num(FatJet, axis=1) >=1
             )
         if 'lep' in sel_names_all["SR"]:
-            selection.add("lep", ak.num(lep) >=1)
+            selection.add("lep", ak.num(lep) == 1)
         if 'met' in sel_names_all["SR"]:
-            selection.add("met", events.MET.pt>20)
+            selection.add("met", events.MET.pt > 20)
         if 'ak4Jet' in sel_names_all["SR"]:
-            selection.add("ak4Jet", ak.num(ak4Jet) <1)
+            selection.add("ak4Jet", ak.num(ak4Jet) < 1)
         # useful debugger for selection efficiency
         sel_SR           = selection.all(* sel_names_all["SR"])
         ################
@@ -248,8 +257,14 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 "btagWeight",
                 weight=(events.btagWeight.DeepCSVB)
             )
-            
- 
+            if dataset.startswith('TT'):
+                topt_reweiging = ak.to_numpy(top_pT_reweighting(events.GenPart)).squeeze()
+                weights.add(
+                    "topt_reweiging",
+                    weight=topt_reweiging,
+                    weightUp=topt_reweiging**2,  # w**2
+                    weightDown=ak.ones_like(topt_reweiging)  # w = 1
+                )
             weights_gen.add(
                 "lumiWeight",
                 weight=np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
@@ -267,7 +282,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         if self.datasetInfo[dataset]['isMC']:
             if shift_syst is None:
                 systList = [
-                    "central"
+                    "central", "topt_reweigingUp", "topt_reweigingDown"
                 ]
             else:
                 systList = [shift_syst]
@@ -287,6 +302,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
 
             # find the event weight to be used when filling the histograms
             weightSyst = syst
+            weightSyst_gen = None
             # in the case of 'central', or the jet energy systematics, no weight systematic variation is used (weightSyst=None)
             if syst in ["central", "JERUp", "JERDown", "JESUp", "JESDown"]:
                 weightSyst = None
@@ -297,7 +313,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 evtWeight = np.ones(len(events))
             else:
                 evtWeight     = weights.weight(weightSyst)
-                evtWeight_gen = weights_gen.weight(weightSyst)
+                evtWeight_gen = weights_gen.weight(weightSyst_gen)
             # all events
             cuts = []
             for ibin, cut in enumerate(allcuts):
@@ -315,7 +331,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 systematic=syst,
                 weight=evtWeight[sel_SR]
             )
-            output['LHE_HT'].fill(
+            output['LHE_HT_gen'].fill(
                 dataset=dataset,
                 LHE_HT=(events.LHE.HT),
                 systematic=syst,
@@ -347,14 +363,18 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 systematic=syst,
                 weight=evtWeight[sel_SR]
             )
+            output['hLeadingFatJetMass'].fill(
+                dataset=dataset,
+                Mass=(ak.flatten(fatjet_sortedbbvs.mass[sel_SR][:, 0:1])),
+                systematic=syst,
+                weight=evtWeight[sel_SR]
+            )
         return output
 
 
     def postprocess(self, accumulator):
         #pass
         return accumulator
-
-
 
 if __name__ == '__main__':
     print("htoaa_Analysis:: main: {}".format(sys.argv)); sys.stdout.flush()
@@ -371,6 +391,7 @@ if __name__ == '__main__':
     sInputFiles         = config["inputFiles"]
     sOutputFile         = config["outputFile"]
     sample_category     = config['sampleCategory']
+    process_name        = config['process_name']
     isMC                = config["isMC"]
     era                 = config['era']
     if isMC:
@@ -383,20 +404,22 @@ if __name__ == '__main__':
 
     sInputFiles_toUse = []
     for sInputFile in sInputFiles:
-        if "*" in sInputFile:  sInputFiles_toUse.extend( glob.glob( sInputFile ) )
-        else:                  sInputFiles_toUse.append( sInputFile )
+        if "*" in sInputFile:
+            sInputFiles_toUse.extend( glob.glob( sInputFile ) )
+        elif 'eos' not in sInputFile:
+            sInputFile = setXRootDRedirector(sInputFile)
+            sFileLocal = f'/tmp/snandan/inputFiles/{process_name}/{os.path.basename(sInputFile)}'
+            if xrdcpFile(sInputFile, sFileLocal, nTry = 3):
+                sInputFiles_toUse.append(sFileLocal)
+            else:
+                print(f"Ip file {sInputFile} failed to download \t **** ERROR ****")
+                exit(1)
+        else:
+            sInputFiles_toUse.append( sInputFile )
     sInputFiles = sInputFiles_toUse
-    for iFile in range(len(sInputFiles)):        
-        if sInputFiles[iFile].startswith("/store/"): # LFN: Logical File Name
-            sInputFiles[iFile] = setXRootDRedirector(sInputFiles[iFile])
-    print(f"sInputFiles ({len(sInputFiles)}) (type {type(sInputFiles)}):");
-    for sInputFile in sInputFiles:
-        print(f"\t{sInputFile}")
     sys.stdout.flush()
     startTime = time.time()
     tracemalloc.start()
-    #client = Client("tls://localhost:8786")
-    #executor = processor.DaskExecutor(client=client)
     chunksize = nEventToReadInBatch
     maxchunks = None if nEventsToAnalyze == -1 else int(nEventsToAnalyze/nEventToReadInBatch)
     print(f"nEventsToAnalyze: {nEventsToAnalyze},  nEventToReadInBatch: {nEventToReadInBatch}, chunksize: {chunksize},  maxchunks: {maxchunks}")
@@ -411,7 +434,6 @@ if __name__ == '__main__':
 
     output, metrics = run(
         fileset={sample_category: sInputFiles},
-        #fileset={"QCD": ["/home/siddhesh/Work/CMS/htoaa/analysis/tmp/20BE2B12-EFF6-8645-AB7F-AFF6A624F816.root"]},
         treename="Events",
         processor_instance=HToAATo4bProcessor(
             datasetInfo={
@@ -434,15 +456,19 @@ if __name__ == '__main__':
         sDir1 = 'evt/%s' % (sample_category)
         with uproot.recreate(sOutputFile) as fOut:
             for key, value in output.items():
-                #print(f"key: {key},  value ({type(value)}): {value}")
-                #if not (key.startswith('h') or key != 'cutflow'): continue
                 if not isinstance(value, hist.Hist): continue
-                #print(f"1: key {key}, value ({type(value)})     Hist: {type(hist.Hist)},    isinstance(value, hist.Hist): {isinstance(value, hist.Hist)}") # value: {value}")
-
                 for _dataset in value.axis('dataset').identifiers():
                     for _syst in value.axis('systematic').identifiers():
                         h1 = value.integrate('dataset',_dataset).integrate('systematic',_syst).to_hist()
-                        fOut['%s/%s_%s' % (sDir1, key, _syst)] = h1
+                        if 'central' not in _syst.name:
+                            histname = f'{key}_{_syst}'
+                        else:
+                            histname = key
+                        if 'gen' not in value.label:
+                            fOut[f'{sDir1}/{histname}'] = h1
+                        else:
+                            if 'central' not in _syst.name: continue
+                            fOut[f'{sDir1}/gen/{histname}'] = h1
     current_memory, peak_memory = tracemalloc.get_traced_memory() # https://medium.com/survata-engineering-blog/monitoring-memory-usage-of-a-running-python-program-49f027e3d1ba
     print(f"\n\nMemory usage:: current {current_memory / 10**6}MB;  peak {peak_memory / 10**6}MB")
 
@@ -452,4 +478,5 @@ if __name__ == '__main__':
     totalTime_min = totalTime - float(totalTime_hr * 60)
     totalTime_min = int(totalTime_min/60)
     totalTime_sec = totalTime - float(totalTime_hr * 60*60) - float(totalTime_min * 60)
+    os.system(f'rm -r /tmp/snandan/inputFiles/{process_name}')
     print(f"Total run time: {totalTime_hr}h {totalTime_min}m {totalTime_sec}s = {totalTime}sec ")
