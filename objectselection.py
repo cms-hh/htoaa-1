@@ -55,6 +55,7 @@ class ObjectSelection:
         mask = ((events.FatJet.pt >= self.FatJetPtThsh)
                 & (abs(events.FatJet.eta) <= self.FatJetEtaThsh)
                 & (events.FatJet.msoftdrop >= self.FatJetMSoftDropThshLow)
+                & (events.FatJet.deepTagMD_bbvsLight >= 0.98)
                 )
         return events.FatJet[mask]
 
