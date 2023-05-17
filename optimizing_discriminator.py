@@ -27,8 +27,8 @@ for var in vars:
         sOb = np.nan_to_num(sOb, nan=0).tolist()
         print(var)
         print(sig)
+        print(bincenters[sOb.index(max(sOb))])
         if sOb.index(max(sOb)) != len(bincenters)-1:
-            print(f"{bincenters[sOb.index(max(sOb))]:0,.2f}, \t {sOb[sOb.index(max(sOb))-1]:0,.2f}\
-            \t {sOb[sOb.index(max(sOb))]:0,.2f}, \t {sOb[sOb.index(max(sOb))+1]:0,.2f}")
+            print(f"{bincenters[sOb.index(max(sOb))]:0,.3f}, \t {sOb[sOb.index(max(sOb))]:0,.2f}")
         else:
-            print(f"{bincenters[sOb.index(max(sOb))]:0,.2f}, \t {sOb[sOb.index(max(sOb))]:0,.2f}")
+            print(f"{bincenters[sOb.index(max(sOb))]:0,.3f}, \t {sOb[sOb.index(max(sOb))]:0,.2f}")
