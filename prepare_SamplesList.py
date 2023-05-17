@@ -26,7 +26,7 @@ list_datasetAndXs_2018 = OD([
     ("/QCD_bEnriched_HT1000to1500_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS:46.61}),
     ("/QCD_bEnriched_HT1500to2000_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS:3.72}),
     ("/QCD_bEnriched_HT2000toInf_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS:0.6462}),
-    # dasgoclient --query="dataset=/QCD_bEnriched_HT*/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v*/NANOAODSIM"
+    #dasgoclient --query="dataset=/QCD_bEnriched_HT*/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v*/NANOAODSIM"
     ("/QCD_HT100to200_BGenFilter_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM", {sXS:1275000.0}),
     ("/QCD_HT200to300_BGenFilter_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM", {sXS:111700.0}),
     ("/QCD_HT300to500_BGenFilter_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM", {sXS:27960}),
@@ -62,8 +62,8 @@ list_datasetAndXs_2018 = OD([
     ## TTbar Jets
     # dasgoclient --query="dataset=/TTJets_TuneCP5_13TeV-amcatnloFXFX-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v*/NANOAODSIM"
     #("/TTJets_TuneCP5_13TeV-amcatnloFXFX-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS: 831.76}),
-    ("/TTJets_SingleLeptFromTbar_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/NANOAODSIM", {sXS:108.7}),
-    ("/TTJets_SingleLeptFromT_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/NANOAODSIM", {sXS:109.6}),
+    ("/TTJets_SingleLeptFromT_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS:109.6}),
+    ("/TTJets_SingleLeptFromTbar_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS:108.7}),
     
 
 
@@ -75,17 +75,22 @@ list_datasetAndXs_2018 = OD([
     ("/ZJetsToQQ_HT-800toInf_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM", {sXS:190.2 }),
     ## WJets
     # dasgoclient --query="dataset=/WJetsToQQ*/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v*/NANOAODSIM"
-    ("/WJetsToQQ_HT-200to400_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM", {sXS:2549 }),
     ("/WJetsToQQ_HT-400to600_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM", {sXS:276.5 }),
     ("/WJetsToQQ_HT-600to800_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM", {sXS:59.25 }),
     ("/WJetsToQQ_HT-800toInf_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM", {sXS:28.75 }),
-    ("/WJetsToLNu_HT-200To400_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/NANOAODSIM", {sXS: 407.9}), #https://cms-gen-dev.cern.ch/xsdb/?columns=67108863&currentPage=0&pageSize=10&searchQuery=DAS%3DTTJets_SingleLeptFromT_TuneCP5_13TeV-madgraphMLM-pythia8 3 xs
-    ("/WJetsToLNu_HT-400To600_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/NANOAODSIM", {sXS: 57.48}), #https://cms-gen-dev.cern.ch/xsdb/?columns=67108863&currentPage=0&pageSize=10&searchQuery=DAS%3DWJetsToLNu_HT-400To600_TuneCP5_13TeV-madgraphMLM-pythia8
-    ("/WJetsToLNu_HT-600To800_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/NANOAODSIM", {sXS: 12.87}),
-    ("/WJetsToLNu_HT-800To1200_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/NANOAODSIM", {sXS: 5.366}),
-    ("/WJetsToLNu_HT-1200To2500_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/NANOAODSIM", {sXS: 1.074}),
-    ("/WJetsToLNu_HT-2500ToInf_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/NANOAODSIM", {sXS: 0.008001}),
-    ("/WJetsToLNu_HT-100To200_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/NANOAODSIM", {sXS: 1395}),
+    ("/WJetsToLNu_HT-70To100_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS:12.92}),
+    ("/WJetsToLNu_HT-200To400_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS: 407.9}), #https://cms-gen-dev.cern.ch/xsdb/?columns=67108863&currentPage=0&pageSize=10&searchQuery=DAS%3DTTJets_SingleLeptFromT_TuneCP5_13TeV-madgraphMLM-pythia8 3 xs
+    ("/WJetsToLNu_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS:52940.0}),
+    ("/WJetsToLNu_HT-400To600_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS: 57.48}), #https://cms-gen-dev.cern.ch/xsdb/?columns=67108863&currentPage=0&pageSize=10&searchQuery=DAS%3DWJetsToLNu_HT-400To600_TuneCP5_13TeV-madgraphMLM-pythia8
+    ("/WJetsToLNu_HT-400To600_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1_ext1-v2/NANOAODSIM", {sXS: 57.48}),
+    ("/WJetsToLNu_HT-600To800_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS: 12.87}),
+    ("/WJetsToLNu_HT-600To800_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1_ext1-v2/NANOAODSIM", {sXS:12.87}),
+    ("/WJetsToLNu_HT-800To1200_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS: 5.366}),
+    ("/WJetsToLNu_HT-800To1200_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1_ext1-v2/NANOAODSIM", {sXS:5.366}),
+    ("/WJetsToLNu_HT-1200To2500_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS: 1.074}),
+    ("/WJetsToLNu_HT-1200To2500_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1_ext1-v2/NANOAODSIM", {sXS:1.074}),
+    ("/WJetsToLNu_HT-2500ToInf_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM", {sXS: 0.008001}),
+    ("/WJetsToLNu_HT-100To200_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM", {sXS: 1395}),
     
     ## SUSY_GluGluH_01J_HToAATo4B_M-*   and   SUSY_GluGluH_01J_HToAATo4B_Pt150_M-*
     # dasgoclient --query="dataset=/SUSY*GluGluH*HToAATo4B*M*/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v*/NANOAODSIM"
@@ -107,7 +112,6 @@ list_datasetAndXs_2018 = OD([
 ])
 
 
-sDataset = "dataset"
 sNanoAOD_nFiles = "nanoAOD_nFiles"
 sNanoAOD = "nanoAOD"
 sCross_section = "cross_section"
@@ -116,7 +120,6 @@ sSumEvents = "sumEvents"
 sc = "sample_category"
 pn = "process_name"
 sampleDetail_dict_template = OD([
-    (sDataset, ""),
     (sCross_section, -1.),
     (sNEvents, -1),
     (sSumEvents, -1),
@@ -143,8 +146,17 @@ def getDatasetFilesFromeos(datasetName_parts):
             sumEvents += np.sum(nevents)
     return sumEvents, nEventsTotal, nFiles, files
 
-def getprocess_name(name):
+def getprocess_name(datasetName_parts):
+    campaign = datasetName_parts[1]#.split('-')[0]
+    name = datasetName_parts[0]
     ret = name.split('_Tune')[0]
+    if 'PSWeights' in name:
+        ret += '_PSWeights'
+    if 'ext' in campaign:
+        ext, v = campaign.split('-')[-2], campaign.split('-')[-1]
+        ext = ext.split('_')[-1]
+        ret += '_'+ext
+        ret += '-'+v
     return ret
 
 def getsample_category(name):
@@ -155,6 +167,10 @@ def getsample_category(name):
         return 'WJets'
     elif name.startswith('SUSY'):
         return name
+    elif name.startswith('QCD'):
+        return 'QCD'
+    elif name.startswith('ZZ') or name.startswith('ZJets'):
+        return 'Z'
     else:
         print(name)
         assert(0)
@@ -218,10 +234,11 @@ if __name__ == '__main__':
         sampleDetails_dict = deepcopy(sampleDetail_dict_template)
         #print(f"sampleDetails_dict_0: {sampleDetails_dict}")
 
-        sampleDetails_dict[sDataset] = datasetName
         datasetName_parts            = datasetName.split('/')[1:]
-        print('datasetName_parts: ', datasetName_parts)
         sampleName                   = datasetName_parts[0]
+        if sampleName in samples_details.keys():
+            print(f'same sample {sampleName} is used')
+            assert(0)
         
         if datasetName_parts[-1] == 'NANOAODSIM':
             # for MC sample
@@ -233,16 +250,18 @@ if __name__ == '__main__':
             del sampleDetails_dict[sCross_section]
             del sampleDetails_dict[sSumEvents]
 
-        
-        
-        sumEvents, nEventsTotal, nFiles, files = getDatasetFilesFromeos(datasetName_parts)#getDatasetFiles(datasetName)
+        sumEvents = -1
+        if 0:
+            sumEvents, nEventsTotal, nFiles, files = getDatasetFilesFromeos(datasetName_parts)
+        else:
+            nEventsTotal, nFiles, files = getDatasetFiles(datasetName)
         sampleDetails_dict[sNEvents] = nEventsTotal
         sampleDetails_dict[sSumEvents] = sumEvents
         sampleDetails_dict[sNanoAOD_nFiles] = nFiles
-        sampleDetails_dict[pn] = getprocess_name(datasetName_parts[0])
+        sampleDetails_dict[pn] = getprocess_name(datasetName_parts)
         sampleDetails_dict[sc] = getsample_category(datasetName_parts[0])
         sampleDetails_dict[sNanoAOD] = files
-        samples_details[sampleName] = sampleDetails_dict
+        samples_details[datasetName] = sampleDetails_dict
 
     if printLevel >= 0:
         print("\n\nsamples:: \n",json.dumps(samples_details, indent=4))
