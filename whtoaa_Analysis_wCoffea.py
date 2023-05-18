@@ -282,8 +282,10 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         if self.datasetInfo[dataset]['isMC']:
             if shift_syst is None:
                 systList = [
-                    "central", "topt_reweigingUp", "topt_reweigingDown"
+                    "central"
                 ]
+                if dataset.startswith('TT'):
+                   systList.extend(["topt_reweigingUp", "topt_reweigingDown"])
             else:
                 systList = [shift_syst]
         else:
