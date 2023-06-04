@@ -26,6 +26,7 @@ def top_pT_reweighting(gen):
     Documentation:
         - https://twiki.cern.ch/twiki/bin/viewauth/CMS/TopPtReweighting 
         - https://indico.cern.ch/event/904971/contributions/3857701/attachments/2036949/3410728/TopPt_20.05.12.pdf
+        - https://indico.cern.ch/event/904971/contributions/3857701/attachments/2036949/3410728/TopPt_20.05.12.pdf
     """
     top = gen[(gen.pdgId == 6) & gen.hasFlags(["isLastCopy"])]
     anti_top = gen[(gen.pdgId == -6) & gen.hasFlags(["isLastCopy"])]
