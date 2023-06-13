@@ -24,6 +24,18 @@ References:
 * Coffea installation: /home/siddhesh/anaconda3/envs/ana_htoaa/lib/python3.10/site-packages/coffea
 '''
 
+pt = OD([
+    ('HT-0To70', [0, 70]),
+    ('HT-70To100', [70,100]),
+    ('HT-100To200', [100,200]),
+    ('HT-200To400', [200,400]),
+    ('HT-400To600', [400,600]),
+    ('HT-600To800', [600,800]),
+    ('HT-800To1200', [800, 1200]),
+    ('HT-1200To2500', [1200,2500]),
+    ('HT-2500ToInf', [2500]),
+])
+
 #import coffea.processor as processor
 from coffea import processor, util
 from coffea.nanoevents import schemas
@@ -38,6 +50,10 @@ from htoaa_Settings import *#bTagWPs
 from htoaa_CommonTools import GetDictFromJsonFile, calculate_lumiScale, setXRootDRedirector, xrdcpFile
 from objectselection import ObjectSelection
 from genparticle import genparticle
+
+stitchingfile = 'stitchinginfo.json'
+with open(stitchingfile) as fSamplesInfo:
+    stitchinginfo = json.load(fSamplesInfo)
 
 nEventToReadInBatch = 0.5*10**6 # 2500000 #  1000 # 2500000
 nEventsToAnalyze =  -1 #-1 # 1000 # 100000 # -1
@@ -55,6 +71,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         systematic_axis = hist.Cat("systematic", "Systematic Uncertatinty")
 
         cutFlow_axis  = hist.Bin("CutFlow",   r"Cuts",            21, -0.5, 20.5)
+        genweight_axis  = hist.Bin("genWeight",   r"genWeight",            201, -100.5, 100.5)
         pt_axis       = hist.Bin("Pt",        r"$p_{T}$ [GeV]",   200, 0, 1000)
         mass_axis     = hist.Bin("Mass",      r"$m$ [GeV]",       300, 0, 300)
         mlScore_axis  = hist.Bin("MLScore",   r"ML score",        200, 0., 1.)
@@ -71,7 +88,8 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             ('hLeadingFatJetParticleNetMD_Xbb',           {sXaxis: mlScore_axis,    sXaxisLabel: r"LeadingFatJetParticleNetMD_Xbb"}),
             ('hLeadingFatJetMass',                        {sXaxis: mass_axis,       sXaxisLabel: r"leading FatJet mass [GeV]"}),
             ('hLeadingFatJetDeepTagMD_bbvsLight',         {sXaxis: mlScore_axis,    sXaxisLabel: r"LeadingFatJetDeepTagMD_bbvsLight"}),
-            ('LHE_HT_gen',                                {sXaxis: LHE_HT_axis,    sXaxisLabel: r"LHE_HT"})
+            ('LHE_HT_gen',                                {sXaxis: LHE_HT_axis,    sXaxisLabel: r"LHE_HT"}),
+            ('genweight',                                  {sXaxis: genweight_axis,    sXaxisLabel: 'genWeight'}),
         ])
         self._accumulator = processor.dict_accumulator({
             'cutflow': processor.defaultdict_accumulator(int)
@@ -242,16 +260,44 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         # create a processor Weights object, with the same length as the number of events in the chunk
         weights     = Weights(len(events))
         weights_gen = Weights(len(events))
-        weights_GenHToAATo4B = Weights(len(events))
-
+        genweight_unique = set(events.genWeight)
+        count = {}
+        for gu in genweight_unique:
+            count[gu] = ak.sum(ak.where(events.genWeight==gu, 1,0))
+        count = sorted([(k,v) for k,v in count.items()], key=lambda kv: kv[1], reverse=True)
+        events.genWeight = ak.where(events.genWeight >3*count[0][0], 3*count[0][0], events.genWeight)
+        stitch = np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
+        for (k,v) in pt.items():
+            if len(v) > 1:
+                stitch = ak.where((events.LHE.HT>=v[0])&(events.LHE.HT<v[1]), 59.83*1000*stitchinginfo[k]['xs']/stitchinginfo[k]['nevent'], stitch)
+            else:
+                stitch = ak.where((events.LHE.HT>=v[0]), 59.83*1000*stitchinginfo[k]['xs']/stitchinginfo[k]['nevent'], stitch)
         if self.datasetInfo[dataset]["isMC"]:
-            weights.add(
-                "lumiWeight",
-                weight=np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
-            )
+            if not self.datasetInfo[dataset]["stitching"]:
+                weights.add(
+                    "lumiWeight",
+                    weight=np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
+                )
+                weights_gen.add(
+                    "lumiWeight",
+                    weight=np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
+                )
+            else:
+                weights.add(
+                    "lumiWeight",
+                    weight=stitch#np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
+                )
+                weights_gen.add(
+                    "lumiWeight",
+                    weight=stitch#np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
+                )
             weights.add(
                 "genWeight",
-                weight=np.copysign(np.ones(len(events)), events.genWeight)
+                weight=events.genWeight#np.copysign(np.ones(len(events)), events.genWeight)
+            )
+            weights_gen.add(
+                "genWeight",
+                weight=events.genWeight#np.copysign(np.ones(len(events)), events.genWeight)
             )
             weights.add(
                 "btagWeight",
@@ -265,15 +311,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                     weightUp=topt_reweiging**2,  # w**2
                     weightDown=ak.ones_like(topt_reweiging)  # w = 1
                 )
-            weights_gen.add(
-                "lumiWeight",
-                weight=np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
-            )
-            weights_gen.add(
-                "genWeight",
-                weight=np.copysign(np.ones(len(events)), events.genWeight)
-            )
-            
             
         ###################
         # FILL HISTOGRAMS
@@ -338,6 +375,11 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 LHE_HT=(events.LHE.HT),
                 systematic=syst,
                 weight=evtWeight_gen
+            )
+            output['genweight'].fill(
+                dataset=dataset,
+                genWeight=(events.genWeight),
+                systematic=syst
             )
             output['hLeadingFatJetMSoftDrop'].fill(
                 dataset=dataset,
@@ -439,8 +481,8 @@ if __name__ == '__main__':
         treename="Events",
         processor_instance=HToAATo4bProcessor(
             datasetInfo={
-                "era": era, 
-                sample_category: {"isMC": isMC, "lumiScale": lumiScale}
+                "era": era,
+                sample_category: {"isMC": isMC, "lumiScale": lumiScale, "stitching":True}
             }
         )
     )
