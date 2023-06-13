@@ -35,7 +35,7 @@ import uproot
 
 from htoaa_Settings import *
 from htoaa_CommonTools import (
-    GetDictFromJsonFile, calculate_lumiScale, setXRootDRedirector,
+    GetDictFromJsonFile, setXRootDRedirector,
     xrdcpFile
 )
 
@@ -147,14 +147,17 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         weights     = Weights(len(events))
         weights_gen = Weights(len(events))
 
-
+        genweight_unique = set(events.genWeight)
+        count = {}
+        for gu in genweight_unique:
+            count[gu] = ak.sum(ak.where(events.genWeight==gu, 1,0))
+        count = sorted([(k,v) for k,v in count.items()], key=lambda kv: kv[1], reverse=True)
+        events.genWeight = ak.where(events.genWeight >3*count[0][0], 3*count[0][0], events.genWeight)
         if self.datasetInfo[dataset]["isMC"]:
             weights_gen.add(
                 "genWeight",
-                weight=np.copysign(np.ones(len(events)), events.genWeight)
+                weight=events.genWeight#np.copysign(np.ones(len(events)), events.genWeight)
             )
-            
-        
         ###################
         # FILL HISTOGRAMS
         ###################
@@ -236,7 +239,6 @@ if __name__ == '__main__':
     config = GetDictFromJsonFile(sConfig)
     print("Config {}: \n{}".format(sConfig, json.dumps(config, indent=4)))
 
-    lumiScale = 1
     sInputFiles         = config["inputFiles"]
     sOutputFile         = config["outputFile"]
     sample_category     = config['sampleCategory']
@@ -250,11 +252,9 @@ if __name__ == '__main__':
         sample_nEvents      = config["nEvents"]
         sample_sumEvents    = config["sumEvents"] if config["sumEvents"] != -1 else sample_nEvents
         if sample_sumEvents == -1: sample_sumEvents = 1 # Case when sumEvents is not calculated
-        lumiScale = calculate_lumiScale(luminosity=luminosity, crossSection=sample_crossSection, sumEvents=sample_sumEvents)    
     #branchesToRead = htoaa_nanoAODBranchesToRead
     #print("branchesToRead: {}".format(branchesToRead))
 
-    print(f"isMC: {isMC}, lumiScale: {lumiScale}")
     sInputFiles_toUse = []
     for sInputFile in sInputFiles:
         if "*" in sInputFile:
@@ -291,7 +291,7 @@ if __name__ == '__main__':
         processor_instance=HToAATo4bProcessor(
             datasetInfo={
                 "era": era, 
-                sample_category: {"isMC": isMC, "lumiScale": lumiScale}
+                sample_category: {"isMC": isMC}
             }
         )
     )
