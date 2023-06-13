@@ -24,8 +24,7 @@ def setXRootDRedirector(fileName):
     redirector_toUse = None
     for redirector in xrootd_redirectorNames:
         print(f"setXRootDRedirector():: Checking {redirector + fileName}"); sys.stdout.flush()
-        '''
-        with uproot.open(redirector + fileName) as file1:
+        '''with uproot.open(redirector + fileName) as file1:
             #print(f"\n{redirector + fileName}: file1.keys(): {file1.keys()}")
             #print(f"\n{redirector + fileName}: file1.keys(): {file1['Events'].numentries}"); sys.stdout.flush()
 
@@ -34,8 +33,8 @@ def setXRootDRedirector(fileName):
                 print(f"{redirector + fileName}: file1.keys(): {file1['Events'].numentries}"); sys.stdout.flush()
                 redirector_toUse = redirector
                 break
-        '''
         file1 = None
+        '''
         try:
             file1 = uproot.open(redirector + fileName)
         except:
@@ -51,7 +50,6 @@ def setXRootDRedirector(fileName):
                 print(f"{redirector + fileName}: {nEntries}"); sys.stdout.flush()
                 redirector_toUse = redirector
                 break
-            
     #print(f"redirector_toUse: {redirector_toUse}")
     
     return redirector_toUse + fileName
@@ -67,7 +65,6 @@ def xrdcpFile(sFileName, sFileNameLocal, nTry = 3):
                                    universal_newlines=True
                                    )
         stdout, stderr = process.communicate()
-        print(f"  {iTry = } {stdout = }, {stderr = }");  sys.stdout.flush()
         if 'FATAL' not in stderr: # download was successful
             return True
 
