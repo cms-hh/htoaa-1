@@ -35,7 +35,13 @@ pt = OD([
     ('HT-1200To2500', [1200,2500]),
     ('HT-2500ToInf', [2500]),
 ])
-
+njet = OD([
+    ('0Jet', 0),
+    ('1Jet', 1),
+    ('2Jet', 2),
+    ('3Jet', 3),
+    ('4Jet', 4)
+])
 #import coffea.processor as processor
 from coffea import processor, util
 from coffea.nanoevents import schemas
@@ -76,6 +82,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         mass_axis     = hist.Bin("Mass",      r"$m$ [GeV]",       300, 0, 300)
         mlScore_axis  = hist.Bin("MLScore",   r"ML score",        200, 0., 1.)
         LHE_HT_axis   = hist.Bin("LHE_HT",   r"LHE_HT",        2500, 0., 3000.)
+        LHE_Njet_axis   = hist.Bin("LHE_Njet",   r"LHE_Njet",        5, -0.5, 4.5)
         sXaxis      = 'xAxis'
         sXaxisLabel = 'xAxisLabel'
         sYaxis      = 'yAxis'
@@ -89,6 +96,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             ('hLeadingFatJetMass',                        {sXaxis: mass_axis,       sXaxisLabel: r"leading FatJet mass [GeV]"}),
             ('hLeadingFatJetDeepTagMD_bbvsLight',         {sXaxis: mlScore_axis,    sXaxisLabel: r"LeadingFatJetDeepTagMD_bbvsLight"}),
             ('LHE_HT_gen',                                {sXaxis: LHE_HT_axis,    sXaxisLabel: r"LHE_HT"}),
+            ('LHE_Njet_gen',                              {sXaxis: LHE_Njet_axis,    sXaxisLabel: r"LHE_Njet"}),
             ('genweight',                                  {sXaxis: genweight_axis,    sXaxisLabel: 'genWeight'}),
         ])
         self._accumulator = processor.dict_accumulator({
@@ -267,11 +275,17 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         count = sorted([(k,v) for k,v in count.items()], key=lambda kv: kv[1], reverse=True)
         events.genWeight = ak.where(events.genWeight >3*count[0][0], 3*count[0][0], events.genWeight)
         stitch = np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
-        for (k,v) in pt.items():
-            if len(v) > 1:
-                stitch = ak.where((events.LHE.HT>=v[0])&(events.LHE.HT<v[1]), 59.83*1000*stitchinginfo[k]['xs']/stitchinginfo[k]['nevent'], stitch)
-            else:
-                stitch = ak.where((events.LHE.HT>=v[0]), 59.83*1000*stitchinginfo[k]['xs']/stitchinginfo[k]['nevent'], stitch)
+        if self.datasetInfo[dataset]["stitching"]:
+            for idx_pt, (k_pt,v_pt) in enumerate(pt.items()):
+                pt_min = v_pt[0]
+                if len(v_pt) > 1:
+                    pt_max = v_pt[1]
+                else:
+                    pt_max = 10000000000
+                    for idx_njet, (k_njet,v_njet) in enumerate(njet.items()):
+                        njet_min = v_njet
+                        stitch = ak.where((events.LHE.HT>=pt_min)&(events.LHE.HT<pt_max)&(events.LHE.Njets==njet_min), 59.83*1000*stitchinginfo[k_pt][k_njet]['xs']/stitchinginfo[k_pt][k_njet]['nevent'] if stitchinginfo[k_pt][k_njet]['nevent'] else stitch, stitch)
+
         if self.datasetInfo[dataset]["isMC"]:
             if not self.datasetInfo[dataset]["stitching"]:
                 weights.add(
@@ -373,6 +387,12 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             output['LHE_HT_gen'].fill(
                 dataset=dataset,
                 LHE_HT=(events.LHE.HT),
+                systematic=syst,
+                weight=evtWeight_gen
+            )
+            output['LHE_Njet_gen'].fill(
+                dataset=dataset,
+                LHE_Njet=(events.LHE.Njets),
                 systematic=syst,
                 weight=evtWeight_gen
             )
@@ -482,7 +502,7 @@ if __name__ == '__main__':
         processor_instance=HToAATo4bProcessor(
             datasetInfo={
                 "era": era,
-                sample_category: {"isMC": isMC, "lumiScale": lumiScale, "stitching":True}
+                sample_category: {"isMC": isMC, "lumiScale": lumiScale, "stitching":False}
             }
         )
     )

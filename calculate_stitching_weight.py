@@ -1,6 +1,7 @@
 from collections import OrderedDict as OD
 import json
 import ROOT as r
+import sys
 
 samplesList = 'Samples_2018UL.json'
 with open(samplesList) as fSamplesInfo:
@@ -68,14 +69,24 @@ pt = OD([
     ('HT-1200To2500', [1200,2500]),
     ('HT-2500ToInf', [2500]),
 ])
+njet  = OD([
+        ('0Jet', 0),
+        ('1Jet', 1),
+        ('2Jet', 2),
+        ('3Jet', 3),
+        ('4Jet', 4)
+])
+
 f = r.TFile('hadd_stitch.root')
 nevents = OD()
 for samplename in [d.GetName() for d in f.Get('evt').GetListOfKeys()]:
     hist = f.Get(f'evt/{samplename}/hCutFlow_central')
     assert(samplename not in nevents.keys())
     nevents[samplename] = {}
-    for idx, key in enumerate(pt.keys()):
-        nevents[samplename][key] = hist.GetBinContent(idx+1)
+    for pt_idx, pt_key in enumerate(pt.keys()):
+            nevents[samplename][pt_key] = {}
+            for njet_idx, njet_key in enumerate(njet.keys()):
+                    nevents[samplename][pt_key][njet_key] = hist.GetBinContent(pt_idx+1, njet_idx+1)
     sample_exist = check_sample(samplename, samples_sum_events)
     nevents[samplename]['nevents'] = hist.Integral()
     nevents[samplename]['xs'] = get_xs(samplename)
@@ -84,12 +95,16 @@ for samplename in [d.GetName() for d in f.Get('evt').GetListOfKeys()]:
             for sample in sample_exist[0]:
                     if samplename == sample: continue
                     hist = f.Get(f'evt/{sample}/hCutFlow_central')
-                    for idx, key in enumerate(pt.keys()):
-                            nevents[samplename][key] += hist.GetBinContent(idx+1)
+                    for pt_idx, pt_key in enumerate(pt.keys()):
+                            for njet_idx, njet_key in enumerate(njet.keys()):
+                                    nevents[samplename][pt_key][njet_key] += hist.GetBinContent(pt_idx+1, njet_idx+1)
                     #if '70To100' in samplename: print('nevents: ', samplename)
                     nevents[samplename]['nevents'] += hist.Integral()
 
+with open('stitching.json', "w") as fSampleInfo:
+        json.dump(nevents, fSampleInfo, indent=4)
 
+#sys.exit()
 stitchinginfo = OD()
 inclu_xs = 0
 exclu_xs = 0
@@ -97,27 +112,37 @@ for htbin in pt.keys():
         #if htbin != 'HT-200To400': continue
         assert(htbin not in stitchinginfo.keys())
         stitchinginfo[htbin] = {}
-        xs = 0
-        nevent = 0
-        inclusive = 0
-        exclusive = 0
-        for sampleinfo in nevents.keys():
-                if exclusive and htbin in sampleinfo: continue
-                if nevents[sampleinfo][htbin] == 0: continue
-                if htbin in sampleinfo: exclusive = True
-                if htbin not in sampleinfo: inclusive = True
-                xs += nevents[sampleinfo]["xs"] * nevents[sampleinfo][htbin] / nevents[sampleinfo]["nevents"]
-                #print('xs: ', sampleinfo, '\t', nevents[sampleinfo]["xs"], '\t', nevents[sampleinfo][htbin] , '\t', nevents[sampleinfo]["nevents"])
-                nevent += nevents[sampleinfo][htbin]
-        if exclusive and inclusive:
-                xs *= 0.5
-        stitchinginfo[htbin]['xs'] = xs
-        stitchinginfo[htbin]['nevent'] = nevent
-        if exclusive or inclusive:
-                exclu_xs += xs
+        for nj in njet.keys():
+                assert(nj not in stitchinginfo[htbin].keys())
+                stitchinginfo[htbin][nj] = {}
+                xs = 0
+                nevent = 0
+                inclusive = 0
+                ht_exclusive = 0
+                nj_exclusive = 0
+                for sampleinfo in nevents.keys():
+                        if ht_exclusive and htbin in sampleinfo:
+                                continue
+                        if nj_exclusive and nj in sampleinfo:
+                                continue
+                        if nevents[sampleinfo][htbin][nj] == 0:
+                                continue
+                        if htbin in sampleinfo: ht_exclusive = True
+                        if nj in sampleinfo: nj_exclusive = True
+                        if htbin not in sampleinfo and nj not in sampleinfo: inclusive = True
+                        xs += nevents[sampleinfo]["xs"] * nevents[sampleinfo][htbin][nj] / nevents[sampleinfo]["nevents"]
+                        #print('xs: ', sampleinfo, '\t', nevents[sampleinfo]["xs"], '\t', nevents[sampleinfo][htbin] , '\t', nevents[sampleinfo]["nevents"])
+                        nevent += nevents[sampleinfo][htbin][nj]
+                if ht_exclusive and nj_exclusive and inclusive:
+                        xs /= 3.
+                elif ht_exclusive and inclusive and not nj_exclusive:
+                        xs *= 0.5
+                elif nj_exclusive and inclusive and not ht_exclusive:
+                        xs *= 0.5
+                stitchinginfo[htbin][nj]['xs'] = xs
+                stitchinginfo[htbin][nj]['nevent'] = nevent
+                if ht_exclusive or nj_exclusive or inclusive:
+                        exclu_xs += xs
 print(exclu_xs, '\t', inclu_xs)
 with open('stitchinginfo.json', "w") as fSampleInfo:
         json.dump(stitchinginfo, fSampleInfo, indent=4)
-
-with open('stitching.json', "w") as fSampleInfo:
-        json.dump(nevents, fSampleInfo, indent=4)

@@ -32,6 +32,13 @@ pt = OD([
     ('HT-1200To2500', [1200,2500]),
     ('HT-2500ToInf', [2500]),
 ])
+njet = OD([
+    ('Njet-0', 0),
+    ('Njet-1', 1),
+    ('Njet-2', 2),
+    ('Njet-3', 3),
+    ('Njet-4', 4)
+])
 #import coffea.processor as processor
 from coffea import processor, util
 from coffea.nanoevents import schemas
@@ -66,13 +73,14 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         self.datasetInfo = datasetInfo
         dataset_axis    = hist.Cat("dataset", "Dataset")
         systematic_axis = hist.Cat("systematic", "Systematic Uncertatinty")
-        cutFlow_axis  = hist.Bin("CutFlow", r"Cuts", len(pt), -0.5, len(pt)-0.5)
+        cutFlow_htaxis  = hist.Bin("LHE_HT", r"Cuts", len(pt), -0.5, len(pt)-0.5)
+        cutFlow_njetaxis  = hist.Bin("LHE_Njets", r"Cuts", len(njet), -0.5, len(njet)-0.5)
         sXaxis      = 'xAxis'
         sXaxisLabel = 'xAxisLabel'
         sYaxis      = 'yAxis'
         sYaxisLabel = 'yAxisLabel'
         histos = OD([
-            ('hCutFlow',                                  {sXaxis: cutFlow_axis,    sXaxisLabel: 'Cuts'}),
+            ('hCutFlow', {sXaxis: cutFlow_htaxis, sXaxisLabel: 'ht bin', sYaxis: cutFlow_njetaxis, sYaxisLabel: 'njet bin'}),
             
         ])        
 
@@ -83,31 +91,18 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         for histName, histAttributes in histos.items():
             hXaxis = deepcopy(histAttributes[sXaxis])
             hXaxis.label = histAttributes[sXaxisLabel]
+            hYaxis = deepcopy(histAttributes[sYaxis])
+            hYaxis.label = histAttributes[sYaxisLabel]
 
-            if sYaxis not in histAttributes.keys():
-                # TH1
-                self._accumulator.add({
-                    histName: hist.Hist(
-                        "Counts",
-                        dataset_axis,
-                        hXaxis, #nObject_axis,
-                        systematic_axis,
-                    )
-                })
-            else:
-                # TH2
-                hYaxis = deepcopy(histAttributes[sYaxis])
-                hYaxis.label = histAttributes[sYaxisLabel]
-                
-                self._accumulator.add({
-                    histName: hist.Hist(
-                        "Counts",
-                        dataset_axis,
-                        hXaxis, #nObject_axis,
-                        hYaxis,
-                        systematic_axis,
-                    )
-                })
+            self._accumulator.add({
+                histName: hist.Hist(
+                    "Counts",
+                    dataset_axis,
+                    hXaxis, #nObject_axis,
+                    hYaxis,
+                    systematic_axis,
+                )
+            })
                 
 
     @property
@@ -155,36 +150,37 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 "genWeight",
                 weight=events.genWeight#np.copysign(np.ones(len(events)), events.genWeight)
             )
+
         output['cutflow']['all events'] += len(events)
         output['cutflow'][sWeighted+'all events'] += weights.weight().sum()
-        for idx, (k,v) in enumerate(pt.items()):
-            selection = PackedSelection()
-            if len(v) >1:
-                selection.add(k, (events.LHE.HT >= v[0]) & (events.LHE.HT < v[1]))
+
+        for idx_pt, (k_pt,v_pt) in enumerate(pt.items()):
+            pt_min = v_pt[0]
+            if len(v_pt) > 1:
+                pt_max = v_pt[1]
             else:
-                selection.add(k, (events.LHE.HT >= v[0]))
-            sel = selection.all(*selection.names)
-            num = len(events[sel])
-            gen = events.genWeight[sel]
+                pt_max = 10000000000
+            for idx_njet, (k_njet,v_njet) in enumerate(njet.items()):
+                njet_min = v_njet
+                selection = PackedSelection()
+                selection.add(k_pt + '_' + k_njet, (events.LHE.HT >= pt_min) & (events.LHE.HT < pt_max) & (events.LHE.Njets == njet_min))
+                sel = selection.all(*selection.names)
+                num = len(events[sel])
 
-            for n in selection.names:
-                sel_i = selection.all(n)
-                output['cutflow'][n] += sel_i.sum()
-                output['cutflow'][sWeighted+n] += weights.weight()[sel_i].sum()
+                for n in selection.names:
+                    sel_i = selection.all(n)
+                    output['cutflow'][n] += sel_i.sum()
+                    output['cutflow'][sWeighted+n] += weights.weight()[sel_i].sum()
 
-            evtWeight = np.ones(len(events))
-            # all events
-            ones_list = np.ones(num)
-            # QCD MC ----------------------------------------------
-            if self.datasetInfo[dataset]['isMC'] :
-                # proper GenWeights
-                if self.datasetInfo[dataset]["isMC"]:
-                    output['hCutFlow'].fill(
-                        dataset=dataset,
-                        CutFlow=(ones_list*idx),
-                        weight=weights_gen.weight(None)[sel],
-                        systematic='central'
-                    )
+                    ones_list = np.ones(num)
+                    if self.datasetInfo[dataset]["isMC"]:
+                        output['hCutFlow'].fill(
+                            dataset=dataset,
+                            LHE_HT=(ones_list*idx_pt),
+                            LHE_Njets=(ones_list*idx_njet),
+                            weight=weights_gen.weight(None)[sel],
+                            systematic='central'
+                        )
         return output
 
 
