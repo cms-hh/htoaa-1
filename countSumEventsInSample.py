@@ -39,9 +39,6 @@ from htoaa_CommonTools import (
     xrdcpFile
 )
 
-# use GOldenJSON
-
- 
 printLevel = 0
 nEventToReadInBatch =  0.5*10**6 # 2500000 #  1000 # 2500000
 nEventsToAnalyze = -1 # 1000 # 100000 # -1
@@ -56,14 +53,13 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         self.datasetInfo = datasetInfo
         dataset_axis    = hist.Cat("dataset", "Dataset")
         systematic_axis = hist.Cat("systematic", "Systematic Uncertatinty")
-        cutFlow_axis  = hist.Bin("CutFlow",   r"Cuts",            21, -0.5, 20.5)
+        cutFlow_axis  = hist.Bin("CutFlow",   r"Cuts", 21, -0.5, 20.5)
         sXaxis      = 'xAxis'
         sXaxisLabel = 'xAxisLabel'
         sYaxis      = 'yAxis'
         sYaxisLabel = 'yAxisLabel'
         histos = OD([
-            ('hCutFlow',                                  {sXaxis: cutFlow_axis,    sXaxisLabel: 'Cuts'}),
-            
+            ('hCutFlow', {sXaxis: cutFlow_axis,    sXaxisLabel: 'Cuts'}),
         ])        
 
         self._accumulator = processor.dict_accumulator({
@@ -88,7 +84,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 # TH2
                 hYaxis = deepcopy(histAttributes[sYaxis])
                 hYaxis.label = histAttributes[sYaxisLabel]
-                
                 self._accumulator.add({
                     histName: hist.Hist(
                         "Counts",
@@ -98,7 +93,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                         systematic_axis,
                     )
                 })
-                
 
     @property
     def accumulator(self):
@@ -121,7 +115,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         return output
     
     def process_shift(self, events, shift_syst=None):
-        
         output = self.accumulator.identity()
         dataset = events.metadata["dataset"] # dataset label
 
@@ -133,7 +126,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         
         if self.datasetInfo[dataset]["isMC"]:
             selection.add("posGenWgt", (events.genWeight > 0))
-        
             selection.add("negGenWgt", (events.genWeight < 0))
 
             sel_posGenWgt           = selection.all("posGenWgt")
@@ -173,14 +165,12 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         else:
             systList = ["noweight"]
 
-            
         output['cutflow']['all events'] += len(events)
         output['cutflow'][sWeighted+'all events'] += weights.weight().sum() 
         for n in selection.names:
             sel_i = selection.all(n)
             output['cutflow'][n] += sel_i.sum()
             output['cutflow'][sWeighted+n] += weights.weight()[sel_i].sum()
-           
 
         for syst in systList:
 
@@ -190,7 +180,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             # in the case of 'central', or the jet energy systematics, no weight systematic variation is used (weightSyst=None)
             if syst in ["central", "JERUp", "JERDown", "JESUp", "JESDown"]:
                 weightSyst = None
-            
             if syst == "noweight":
                 evtWeight = np.ones(len(events))
             else:
@@ -203,26 +192,23 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 CutFlow=(ones_list * iBin),
                 systematic=syst
             )
-            # QCD MC ----------------------------------------------
-            if self.datasetInfo[dataset]['isMC'] :
-                # proper GenWeights
-                iBin = 1
-                if self.datasetInfo[dataset]["isMC"]:
-                    output['hCutFlow'].fill(
-                        dataset=dataset,
-                        CutFlow=(ones_list * iBin),
-                        systematic=syst,
-                        weight=evtWeight_gen
-                    )
-                else:
-                    output['hCutFlow'].fill(
-                        dataset=dataset,
-                        CutFlow=(ones_list * iBin),
-                        systematic=syst,
-                        weight=weights
-                    )
+            # MC ----------------------------------------------
+            iBin = 1
+            if self.datasetInfo[dataset]["isMC"]:
+                output['hCutFlow'].fill(
+                    dataset=dataset,
+                    CutFlow=(ones_list * iBin),
+                    systematic=syst,
+                    weight=evtWeight_gen
+                )
+            else:
+                output['hCutFlow'].fill(
+                    dataset=dataset,
+                    CutFlow=(ones_list * iBin),
+                    systematic=syst,
+                    weight=weights
+                )
         return output
-
 
     def postprocess(self, accumulator):
         #pass
@@ -235,7 +221,7 @@ if __name__ == '__main__':
         print("htoaa_Analysis:: Command-line config file missing.. \t **** ERROR **** \n")
 
     sConfig = sys.argv[1]
-    
+
     config = GetDictFromJsonFile(sConfig)
     print("Config {}: \n{}".format(sConfig, json.dumps(config, indent=4)))
 
@@ -245,7 +231,6 @@ if __name__ == '__main__':
     process_name        = config['process_name']
     isMC                = config["isMC"]
     era                 = config['era']
-    downloadIpFiles     = config['downloadIpFiles'] if 'downloadIpFiles' in config else False
     if isMC:
         luminosity          = Luminosities[era][0]
         sample_crossSection = config["crossSection"]
@@ -302,9 +287,8 @@ if __name__ == '__main__':
         print("Cutflow::")
         for key in output['cutflow'].keys():
             if key.startswith(sWeighted): continue
-
             print("%10f\t%10d\t%s" % (output['cutflow'][sWeighted+key], output['cutflow'][key], key))
-    
+
     if sOutputFile is not None:
         if not sOutputFile.endswith('.root'): sOutputFile += '.root'
         sDir1 = 'evt/%s' % (process_name) #
@@ -318,7 +302,7 @@ if __name__ == '__main__':
                         fOut['%s/%s_%s' % (sDir1, key, _syst)] = h1
                 
         print("Wrote to sOutputFile {}".format(sOutputFile))
-    
+
     current_memory, peak_memory = tracemalloc.get_traced_memory() # https://medium.com/survata-engineering-blog/monitoring-memory-usage-of-a-running-python-program-49f027e3d1ba
     print(f"\n\nMemory usage:: current {current_memory / 10**6}MB;  peak {peak_memory / 10**6}MB")
 
