@@ -458,6 +458,7 @@ if __name__ == '__main__':
     process_name        = config['process_name']
     isMC                = config["isMC"]
     era                 = config['era']
+    applystitching      = config['applystitching']
     if isMC:
         luminosity          = Luminosities[era][0]
         sample_crossSection = config["crossSection"]
@@ -502,7 +503,7 @@ if __name__ == '__main__':
         processor_instance=HToAATo4bProcessor(
             datasetInfo={
                 "era": era,
-                sample_category: {"isMC": isMC, "lumiScale": lumiScale, "stitching":False}
+                sample_category: {"isMC": isMC, "lumiScale": lumiScale, "stitching":applystitching}
             }
         )
     )
