@@ -77,5 +77,6 @@ config_Template = OD([
     ("crossSection", 0),
     ("nEvents", -1),
     ("sumEvents", -1),
-    ("downloadIpFiles", False),    
+    ("downloadIpFiles", False),
+    ("applystitching", False)
 ])

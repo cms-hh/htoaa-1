@@ -8,6 +8,9 @@ import numpy as np
 import time
 from datetime import datetime
 import copy
+import re
+from condor_helper import *
+from calculate_sample_sumEvents import *
 
 from htoaa_Settings import *
 from htoaa_Samples import (
@@ -23,159 +26,6 @@ sOpRootFile       = "analyze_htoaa_$SAMPLE_$STAGE_$IJOB.root"
 
 printLevel = 3
 
-def check_sample(proc, samples_sum):
-        for sample_sum in samples_sum:
-                if proc in sample_sum[0]:
-                        print(f'{proc} found on {sample_sum[0]}')
-                        return (True, sample_sum[1])
-        return (False, 0)
-
-def calculate_samples_sum_event(samplesInfo):
-    samples_sum = []
-    for idx1, sample_info in enumerate(samplesInfo):
-        #samplesInfo[sample_info]['sumEvents'] = get_histvalue(samplesInfo[sample_info]['process_name'])
-        proc = samplesInfo[sample_info]['process_name']
-        proc_1_mod = proc.lower()
-        sample_exist = check_sample(proc, samples_sum)
-        if sample_exist[0]: continue
-        sample_sum = []
-        gensum = 0
-        for idx2, sample_info_2 in enumerate(samplesInfo):
-                if not (idx2 > idx1): continue
-                add_sample = False
-                proc_2 = samplesInfo[sample_info_2]['process_name']
-                proc_2_mod = proc_2.lower()
-                if proc_1_mod == proc_2_mod:
-                        add_sample = True
-                else:
-                        proc_2_mod = proc_2_mod.split('_psweights')[0]
-                        proc_2_mod = proc_2_mod.split('_ext')[0]
-                        proce_1_mod = proc_1_mod.split('_psweights')[0]
-                        proce_1_mod = proc_1_mod.split('_ext')[0]
-                        if proc_2_mod == proc_1_mod:
-                                add_sample = True
-                if add_sample:
-                        if len(sample_sum) == 0:
-                                sample_sum.append(proc)
-                                gensum += samplesInfo[sample_info]['sumEvents']
-                        sample_sum.append(proc_2)
-                        gensum += samplesInfo[sample_info_2]['sumEvents']
-        if len(sample_sum): samples_sum.append([sample_sum, gensum])
-    return samples_sum
-
-def writeCondorExecFile(condor_exec_file, sConfig_to_use):
-    if not os.path.isfile(condor_exec_file):    
-        with open(condor_exec_file, 'w') as f:
-            f.write("#!/bin/bash  \n\n")
-            f.write("cd %s \n" % pwd)
-            f.write("export VO_CMS_SW_DIR=/cvmfs/cms.cern.ch \n")
-            f.write("export SCRAM_ARCH=slc6_amd64_gcc700  \n")
-            f.write("source /cvmfs/cms.cern.ch/cmsset_default.sh \n\n")
-            #f.write("cd ")
-            #f.write("export X509_USER_PROXY=/afs/cern.ch/user/s/ssawant/x509up_u108989  \n")
-
-            # Using x509 proxy without shipping it with the job  https://batchdocs.web.cern.ch/tutorial/exercise2e_proxy.html
-            f.write("export X509_USER_PROXY=$1 \n")
-            f.write("voms-proxy-info -all \n")
-            f.write("voms-proxy-info -all -file $1 \n")
-            
-            #f.write("eval \n")
-            f.write("cd %s \n" % (pwd))
-            f.write("source /afs/cern.ch/user/s/snandan/.bashrc \n")
-            f.write("which conda \n")
-            f.write("time conda env list \n")
-            f.write("conda activate myEnv \n")
-            f.write("time conda env list \n")
-
-            f.write("time conda list \n")
-            f.write("which python3 \n")
-            f.write("python3 -V \n")
-            #f.write(" \n")
-            f.write("time /afs/cern.ch/work/s/snandan/anaconda3/envs/myEnv/bin/python3 %s/%s  %s \n" % (pwd, sAnalysis, sConfig_to_use))
-
-        os.system("chmod a+x %s" % condor_exec_file)
-
-    return;
-
-
-def writeCondorSumitFile(condor_submit_file, condor_exec_file, sCondorLog_to_use, sCondorOutput_to_use, sCondorError_to_use, increaseJobFlavour=False):
-    '''
-    Job Flavours::
-    espresso     = 20 minutes
-    microcentury = 1 hour
-    longlunch    = 2 hours
-    workday      = 8 hours
-    tomorrow     = 1 day
-    testmatch    = 3 days
-    nextweek     = 1 week
-    '''
-
-    jobFlavours = OD([
-        (0, 'espresso'),
-        (1, 'microcentury'),
-        (2, 'longlunch'),
-        (3, 'workday'),
-        (4, 'tomorrow'),
-        (5, 'testmatch'),
-        (6, 'nextweek'),
-    ])
-    #iJobFlavour = 2 # 2, 'longlunch' 2 hours
-    iJobFlavour = 1 # 1, 'microcentury' 
-    if increaseJobFlavour: iJobFlavour += 1
-    
-    
-    #if not os.path.isfile(condor_submit_file):
-    with open(condor_submit_file, 'w') as f:
-        f.write("universe = vanilla \n")
-        
-        
-        f.write("executable = %s \n" % condor_exec_file)
-        f.write("getenv = TRUE \n")
-        f.write("log = %s \n" % (sCondorLog_to_use))
-        f.write("output = %s \n" % (sCondorOutput_to_use))
-        f.write("error = %s \n" % (sCondorError_to_use))
-        f.write("notification = never \n")
-        f.write("should_transfer_files = YES \n")
-        f.write("when_to_transfer_output = ON_EXIT \n")
-
-        #f.write("x509userproxy = /afs/cern.ch/user/s/ssawant/x509up_u108989 \n")
-        #f.write("use_x509userproxy = true \n")
-        f.write("x509userproxy=proxy \n")
-        f.write("arguments = $(x509userproxy)  \n")
-        
-        #f.write("+JobFlavour = \"longlunch\" \n")
-        f.write("+JobFlavour = \"%s\" \n" % (jobFlavours[iJobFlavour]))
-        f.write("queue \n")
-
-
-    os.system("chmod a+x %s" % condor_submit_file)
-    return
-
-
-def searchStringInFile(sFileName, searchString, nLinesToSearch, SearchFromEnd=True):
-    lines = None
-    
-    with open(sFileName, 'r') as f:
-    
-        if SearchFromEnd:
-            # https://stackoverflow.com/questions/260273/most-efficient-way-to-search-the-last-x-lines-of-a-file
-            # f.seek(offset, whence)
-            #        offset − This is the position of the read/write pointer within the file.
-            #        whence − This is optional and defaults to 0 which means absolute file positioning, other values are 1 which means seek relative to the current position and 2 means seek relative to the file's end.
-            f.seek(0, 2)  # Seek @ EOF
-            fsize = f.tell() # Get size of file
-            f.seek(max(fsize-1024, 0), 0) # Set pos @ last n chars
-            lines = f.readlines()  # Read to end
-
-    lines = lines[-1*nLinesToSearch : ] # Get last x lines
-    searchStringFound = False
-    for line in lines:
-        if searchString in line:
-            searchStringFound = True
-            break
-
-    return searchStringFound
-
 if __name__ == '__main__':
 
     print("htoaa_Wrapper:: main: {}".format(sys.argv)); sys.stdout.flush()
@@ -190,7 +40,9 @@ if __name__ == '__main__':
     parser.add_argument('-ResubWaitingTime',  type=int, default=15, help='Resubmit failed jobs after every xx minutes')
     parser.add_argument('-iJobSubmission',    type=int, default=0,  help='Job submission iteration. Specify previous last job submittion iteration if script terminated for some reason.')
     parser.add_argument('-dryRun',            action='store_true', default=False)
-    parser.add_argument('-rf', '--run_file',    type=str, default='analysis', choices=['analysis', 'count_genweight'])
+    parser.add_argument('-rf', '--run_file',    type=str, default='analysis', choices=['analysis', 'count_genweight', 'stitch'])
+    parser.add_argument('-as', '--applystitching', action='store_false', default=True)
+
     args=parser.parse_args()
     print("args: {}".format(args))
 
@@ -203,25 +55,26 @@ if __name__ == '__main__':
     ResubWaitingTime = args.ResubWaitingTime
     iJobSubmission   = args.iJobSubmission
     dryRun           = args.dryRun
-    run_file = args.run_file
+    run_file         = args.run_file
+    applystitching   = args.applystitching
+
     if run_file == 'count_genweight':
-        sAnalysis        = 'countSumEventsInSample.py'
+            sAnalysis = 'countSumEventsInSample.py'
+    elif run_file == 'stitch':
+        sAnalysis = 'count_LHE_HT.py'
 
     pwd = os.getcwd()
     DestinationDir = "./%s" % (anaVersion)
-    if   "/home/siddhesh/" in pwd: DestinationDir = "/home/siddhesh/Work/CMS/htoaa/analysis/%s" % (anaVersion)
-    elif "/afs/cern.ch/"   in pwd: DestinationDir = "/afs/cern.ch/work/s/snandan/public/myforkhtoaa/htoaa-1/%s" % (anaVersion)
+    if "/afs/cern.ch/" in pwd: DestinationDir = "/afs/cern.ch/work/s/snandan/public/myforkhtoaa/htoaa-1/%s" % (anaVersion)
     sFileRunCommand = "%s/%s" % (DestinationDir, sRunCommandFile)
     sFileJobSubLog  = "%s/%s" % (DestinationDir, sJobSubLogFile)
-    if not os.path.exists(DestinationDir): os.mkdir( DestinationDir )
+    if not os.path.exists(DestinationDir): os.mkdir(DestinationDir)
 
     # save run command into a .txt tile
     with open(sFileRunCommand, 'a') as fRunCommand:
         datatime_now = datetime.now()
         sCommand = ' '.join(sys.argv)
-        fRunCommand.write('%s    %s \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), sCommand))
-
-
+        fRunCommand.write('%s %s \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), sCommand))
     do_hadd = False
     samplesList = None
     samplesInfo = None
@@ -236,22 +89,22 @@ if __name__ == '__main__':
     if selSamplesToRun:
         selSamplesToRun_list = selSamplesToRun.split(',')
 
+    condor_ana = condor(sAnalysis, sFileJobSubLog)
     while iJobSubmission <= nResubmissionMax:
 
-        print('\n\n%s \t Startiing iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
-
-        OpRootFiles_Target         = []
-        OpRootFiles_Exist          = []
-        OpRootFiles_iJobSubmission = []
-        jobStatus_dict             = {} # OD([])
-
+        print('\n\n%s \t Startiing iJobSubmission for analysis: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
+        condor_ana.initialize_list()
         samples_sum_events = calculate_samples_sum_event(samplesInfo)
         for dbsname, sampleInfo in samplesInfo.items():
                 sample_category = sampleInfo['sample_category']
+                process_name = sampleInfo['process_name']
                 if len(selSamplesToRun_list) > 0:
                     skipThisSample = True
                     for selSample in selSamplesToRun_list:
-                        if selSample in sample_category: skipThisSample = False
+                        if not applystitching:
+                            if sample_category == 'WJets' and (re.findall('^W[1-4]Jets', process_name) or ('HT-' in process_name)):
+                                break
+                        if selSample in process_name or selSample in sample_category: skipThisSample= False# and 'HT' not in sampleInfo['process_name'] and not re.findall('^W[0-4]Jets', sampleInfo['process_name']): skipThisSample= False#sample_category: skipThisSample = False
                     if skipThisSample:
                         continue
 
@@ -262,7 +115,6 @@ if __name__ == '__main__':
                     else:              files.append( iEntry )
                 sample_cossSection = sampleInfo["cross_section"] if (sample_category != kData) else None
                 sample_nEvents     = sampleInfo["nEvents"]
-                process_name = sampleInfo['process_name']
                 sample_exist = check_sample(process_name, samples_sum_events)
                 if sample_exist[0]:
                         sample_sumEvents   = sample_exist[1]
@@ -273,109 +125,43 @@ if __name__ == '__main__':
                 nSplits = 1 if nSplits==0 else nSplits
 
                 files_splitted = np.array_split(files, nSplits)
+                sampledir = os.path.join(DestinationDir, process_name)
                 for iJob in range(len(files_splitted)):
                     #config = config_Template.deepcopy()
                     config = copy.deepcopy(config_Template)
 
                     # Job related files
-                    sOpRootFile_to_use    = '%s/%s' % (DestinationDir, sOpRootFile)
+                    outputdir = os.path.join(sampledir, 'output')
+                    if not os.path.exists(outputdir): os.makedirs(outputdir)
+                    sOpRootFile_to_use    = '%s/%s' % (outputdir, sOpRootFile)
                     sOpRootFile_to_use    = sOpRootFile_to_use.replace('$SAMPLE', process_name)
                     sOpRootFile_to_use    = sOpRootFile_to_use.replace('$STAGE', str(0))
                     sOpRootFile_to_use    = sOpRootFile_to_use.replace('$IJOB', str(iJob))
 
-                    sConfig_to_use        = sOpRootFile_to_use.replace('.root', '_config.json')
-                    sCondorExec_to_use    = sOpRootFile_to_use.replace('.root', '_condor_exec.sh')
-                    sCondorSubmit_to_use  = sOpRootFile_to_use.replace('.root', '_condor_submit.sh')
-                    sCondorLog_to_use     = sOpRootFile_to_use.replace('.root', '_condor.log')
-                    sCondorOutput_to_use  = sOpRootFile_to_use.replace('.root', '_condor.out')
-                    sCondorError_to_use   = sOpRootFile_to_use.replace('.root', '_condor.error')
+                    configdir = os.path.join(sampledir, 'config')
+                    if not os.path.exists(configdir): os.makedirs(configdir)
+                    sConfig_to_use = sOpRootFile_to_use.replace('.root', '_config.json').replace(outputdir, configdir)
 
+                    condordir = os.path.join(sampledir, 'condor')
+                    if not os.path.exists(condordir): os.makedirs(condordir)
+                    sCondorExec_to_use    = sOpRootFile_to_use.replace('.root', '_condor_exec.sh').replace(outputdir, condordir)
+                    sCondorSubmit_to_use  = sOpRootFile_to_use.replace('.root', '_condor_submit.sh').replace(outputdir, condordir)
+                    sCondorLog_to_use     = sOpRootFile_to_use.replace('.root', '_condor.log').replace(outputdir, condordir)
+                    sCondorOutput_to_use  = sOpRootFile_to_use.replace('.root', '_condor.out').replace(outputdir, condordir)
+                    sCondorError_to_use   = sOpRootFile_to_use.replace('.root', '_condor.error').replace(outputdir, condordir)
+                    condor_ana.initialize_files(sOpRootFile_to_use, configdir,
+                                                sConfig_to_use, condordir, sCondorExec_to_use,
+                                                sCondorSubmit_to_use, sCondorLog_to_use, sCondorOutput_to_use,
+                                                sCondorError_to_use
+                                            )
+                    jobStatusForJobSubmission  = [0, 3, 4, 5]
                     # Check if job related file exist or not
-                    isConfigExist        = os.path.isfile(sConfig_to_use)
-                    isOpRootFileExist    = os.path.isfile(sOpRootFile_to_use)
-                    isCondorExecExist    = os.path.isfile(sCondorExec_to_use)
-                    isCondorSubmitExist  = os.path.isfile(sCondorSubmit_to_use)
-                    isCondorLogExist     = os.path.isfile(sCondorLog_to_use)
-                    isCondorOutputExist  = os.path.isfile(sCondorOutput_to_use)
-                    isCondorErrorExist   = os.path.isfile(sCondorError_to_use)
-
-                    jobStatus = -1
-                    jobStatusForJobSubmission = [0, 3, 4, 5]
-
-                    if not isConfigExist:
-                        jobStatus = 0 # job not yet submitted
-                        if printLevel >= 3:
-                            print(f"  jobStatus = 0")
-
-                    elif isOpRootFileExist:
-                        jobStatus = 1 # job ran successfully
-                        OpRootFiles_Exist.append(sOpRootFile_to_use)
-                        if printLevel >= 3:
-                            print(f"  jobStatus = 1")
-                            
-                    else:
-                        if isCondorLogExist:
-                            
-                            if (searchStringInFile(                                    
-                                    sFileName       = sCondorLog_to_use,
-                                    searchString    = 'Job terminated',
-                                    nLinesToSearch  = 3,
-                                    SearchFromEnd   = True)):
-                                # check wheter the job was terminated or not
-                                jobStatus = 3 # job failed due to some other error
-                                if printLevel >= 3:
-                                    print(f"  jobStatus = 3")
-                                    
-                                    
-                                # check if job failed due to XRootD error
-                                if (searchStringInFile(                                        
-                                        sFileName       = sCondorError_to_use,
-                                        searchString    = 'OSError: XRootD error: [ERROR]', 
-                                        nLinesToSearch  = 150,
-                                        SearchFromEnd   = True) or \
-                                    searchStringInFile(
-                                        sFileName       = sCondorError_to_use,
-                                        searchString    = '[ERROR] Invalid redirect URL', 
-                                        nLinesToSearch  = 150,
-                                        SearchFromEnd   = True) ):
-                                    jobStatus = 5 # job failed due to XRootD error
-                                    if printLevel >= 3:
-                                        print(f"  jobStatus = 5")
-                                        
-
-                            elif (searchStringInFile(
-                                    sFileName       = sCondorLog_to_use,
-                                    searchString    = 'Job was aborted',
-                                    nLinesToSearch  = 3,
-                                    SearchFromEnd   = True)):
-                                # check wheter sCondorError does not exist due to Job was aborted
-                                jobStatus = 4 # job aborted
-                                if printLevel >= 3:
-                                    print(f"  jobStatus = 4")
-                                    
-                                    
-                            else:
-                                jobStatus = 2 # job is running
-                                if printLevel >= 3:
-                                    print(f"  jobStatus = 2")
-                                
-                                
-
-                    OpRootFiles_Target.append(sOpRootFile_to_use)
-                    if jobStatus in jobStatusForJobSubmission : # [0, 3, 4]:
-                        OpRootFiles_iJobSubmission.append(sOpRootFile_to_use)
-
-                    if jobStatus not in jobStatus_dict.keys():
-                        jobStatus_dict[jobStatus] = [sOpRootFile_to_use]
-                    else:
-                        jobStatus_dict[jobStatus].append(sOpRootFile_to_use)
-                    
-
+                    jobStatus = condor_ana.check_jobstatus(printLevel >= 3)
                     #if iJobSubmission == 0:
                     if jobStatus == 0:
                         config["era"] = era
                         config["inputFiles"] = list( files_splitted[iJob] )
-                        config["outputFile"] = sOpRootFile_to_use 
+                        config["outputFile"] = condor_ana.sOpRootFile_to_use 
                         config["sampleCategory"] = sample_category
                         config['process_name'] = process_name
                         config["isMC"] = (sample_category != kData)
@@ -384,91 +170,192 @@ if __name__ == '__main__':
                         if (sample_category != kData):
                             config["crossSection"] = sample_cossSection
                             config["sumEvents"] = sample_sumEvents
+                            if applystitching:
+                                if sample_category == 'WJets':
+                                    config['applystitching'] = True
                         else:
                             del config["crossSection"]
                             del config["sumEvents"]
 
-
-                        with open(sConfig_to_use, "w") as fConfig:
+                        with open(condor_ana.sConfig_to_use, "w") as fConfig:
                             json.dump( config,  fConfig, indent=4)
 
-
-                        writeCondorExecFile(sCondorExec_to_use, sConfig_to_use)
-
+                        condor_ana.writeCondorExecFile()
 
                     if jobStatus in jobStatusForJobSubmission: #[0, 3, 4]:
                         if jobStatus == [3, 5]:
                             # save previos .out and .error files with another names
-                            sCondorOutput_vPrevious = sCondorOutput_to_use.replace('.out', '_v%d.out' % (iJobSubmission-1))
-                            sCondorError_vPrevious  = sCondorError_to_use.replace('.error', '_v%d.error' % (iJobSubmission-1))
-                            os.rename(sCondorOutput_to_use, sCondorOutput_vPrevious)
-                            os.rename(sCondorError_to_use,  sCondorError_vPrevious)
+                            sCondorOutput_vPrevious = condor_ana.sCondorOutput_to_use.replace('.out', '_v%d.out' % (iJobSubmission-1))
+                            sCondorError_vPrevious  = condor_ana.sCondorError_to_use.replace('.error', '_v%d.error' % (iJobSubmission-1))
+                            os.rename(condor_ana.sCondorOutput_to_use, sCondorOutput_vPrevious)
+                            os.rename(condor_ana.sCondorError_to_use,  sCondorError_vPrevious)
 
                         increaseJobFlavour = False
                         if jobStatus == 4:
                             increaseJobFlavour = True
-                            
-                        writeCondorSumitFile(sCondorSubmit_to_use, sCondorExec_to_use, sCondorLog_to_use, sCondorOutput_to_use, sCondorError_to_use,
-                                             increaseJobFlavour)
 
-
+                        condor_ana.writeCondorSumitFile(increaseJobFlavour)
 
                     if jobStatus in [1, 2]:
                         # job is either running or succeeded
                         continue
 
                     if run_mode == 'condor':
-                        cmd1 = "condor_submit %s" % sCondorSubmit_to_use 
+                        cmd1 = "condor_submit %s" % condor_ana.sCondorSubmit_to_use 
                         print("Now:  %s " % cmd1)
                         if not dryRun:
                             os.system(cmd1)
                     else:
                         pass
         # write JobSubmission status report in JobSubLog file
-        with open(sFileJobSubLog, 'a') as fJobSubLog:
-            fJobSubLog.write('%s \t iJobSubmission %d \t OpRootFiles_Target (%d):  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission, len(OpRootFiles_Target)))
-            if iJobSubmission == 0:
-                for f in OpRootFiles_Target:
-                    fJobSubLog.write('\t %s \n' % (f))
-            else:
-                fJobSubLog.write('OpRootFiles_Exist %d out of %d. \n' % (len(OpRootFiles_Exist), len(OpRootFiles_Target)))
-                fJobSubLog.write('OpRootFiles_iJobSubmission (%d): ' % (len(OpRootFiles_iJobSubmission)))
-                for f in OpRootFiles_iJobSubmission:
-                    fJobSubLog.write('\t %s \n' % (f))
-
-                fJobSubLog.write('\n\nJob status wise output files: \n')
-                for jobStatus in jobStatus_dict.keys():
-                    fJobSubLog.write('\t jobStatus %d (%d) \n' % (jobStatus, len(jobStatus_dict[jobStatus])))
-                    if jobStatus in [0, 1]: continue
-                    
-                    for f in jobStatus_dict[jobStatus]:
-                        fJobSubLog.write('\t\t %s \n' % (f))
-                
-            fJobSubLog.write('%s\n\n\n' % ('-'*10))
-
-        jobStatus_list = [ (jobStatus, len(jobStatus_dict[jobStatus])) for jobStatus in jobStatus_dict.keys() ]
-        print('\n\n\n%s \t iJobSubmission %d \t OpRootFiles_Exist %d out of %d. No. of jobs submitted in this resubmission: %d:  ' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission, len(OpRootFiles_Exist), len(OpRootFiles_Target), len(OpRootFiles_iJobSubmission)))
-        print(f"jobStatus_list: {jobStatus_list} \n"); sys.stdout.flush()
-            
+        condor_ana.update_JobSubLog(iJobSubmission)
         if dryRun:
             print('%s \t druRun with iJobSubmission: %d  \nTerminating...\n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
             exit(0)
-            
-        if len(OpRootFiles_Target) == len(OpRootFiles_Exist):
+        if len(condor_ana.OpRootFiles_Target) == len(condor_ana.OpRootFiles_Exist):
             break
         else:
             do_hadd = True
             time.sleep( ResubWaitingTime * 60 )
             iJobSubmission += 1
 
-    with open(sFileJobSubLog, 'a') as fJobSubLog:
+    with open(condor_ana.fJobSubLog, 'a') as fJobSubLog:
         fJobSubLog.write('%s \t Jobs are done. iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
     print('%s \t Jobs are done. iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
+del condor_ana
 
-if do_hadd:
+if 1:
+    condor_hadd = condor('hadd.py', sJobSubLogFile)
+    inputdirs = glob.glob(f'{DestinationDir}/*/output/')
+    iJobSubmission = 0
+    while iJobSubmission <= nResubmissionMax:
+        print('\n\n%s \t Startiing iJobSubmission for hadd: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
+        condor_hadd.initialize_list()
+
+        for inputdir in inputdirs:
+            process_name = inputdir.split('/')[-3]
+            if process_name == 'hadd': continue
+            sOpRootFile_to_use    = os.path.join(inputdir, f'hadd_{process_name}.root')
+            sConfig_to_use        = sOpRootFile_to_use.replace('.root', '_config.json').replace('output', 'config')
+            sCondorExec_to_use    = sOpRootFile_to_use.replace('.root', '_condor_exec.sh').replace('output', 'condor')
+            sCondorSubmit_to_use  = sOpRootFile_to_use.replace('.root', '_condor_submit.sh').replace('output', 'condor')
+            sCondorLog_to_use     = sOpRootFile_to_use.replace('.root', '_condor.log').replace('output', 'condor')
+            sCondorOutput_to_use  = sOpRootFile_to_use.replace('.root', '_condor.out').replace('output', 'condor')
+            sCondorError_to_use   = sOpRootFile_to_use.replace('.root', '_condor.error').replace('output', 'condor')
+            condor_hadd.initialize_files(sOpRootFile_to_use, configdir,
+                                         sConfig_to_use, condordir, sCondorExec_to_use,
+                                         sCondorSubmit_to_use, sCondorLog_to_use, sCondorOutput_to_use,
+                                         sCondorError_to_use
+                                     )
+            jobStatus = condor_hadd.check_jobstatus(printLevel >= 3)
+            config = {}
+            if jobStatus == 0:
+                config["inputdir"] = inputdir
+                config["outputFile"] = sOpRootFile_to_use
+                with open(sConfig_to_use, "w") as fConfig:
+                    json.dump( config,  fConfig, indent=4)
+                condor_hadd.writeCondorExecFile(f'-p {config["inputdir"]} -o {config["outputFile"]}')
+            if jobStatus in jobStatusForJobSubmission: #[0, 3, 4]:
+                if jobStatus == [3, 5]:
+                    # save previos .out and .error files with another names
+                    sCondorOutput_vPrevious = sCondorOutput_to_use.replace('.out', '_v%d.out' % (iJobSubmission-1))
+                    sCondorError_vPrevious  = sCondorError_to_use.replace('.error', '_v%d.error' % (iJobSubmission-1))
+                    os.rename(condor_hadd.sCondorOutput_to_use, sCondorOutput_vPrevious)
+                    os.rename(condor_hadd.sCondorError_to_use,  sCondorError_vPrevious)
+                increaseJobFlavour = False
+                if jobStatus == 4:
+                    increaseJobFlavour = True
+                condor_hadd.writeCondorSumitFile(increaseJobFlavour)
+            if jobStatus in [1, 2]:
+                # job is either running or succeeded
+                continue
+            if run_mode == 'condor':
+                cmd1 = "condor_submit %s" % condor_hadd.sCondorSubmit_to_use
+                print("Now:  %s " % cmd1)
+                if not dryRun:
+                    os.system(cmd1)
+                else:
+                    pass
+        if len(condor_hadd.OpRootFiles_Target) == len(condor_hadd.OpRootFiles_Exist):
+            break
+        else:
+            time.sleep( ResubWaitingTime * 60 )
+            iJobSubmission += 1
+    with open(condor_hadd.fJobSubLog, 'a') as fJobSubLog:
+        fJobSubLog.write('%s \t Jobs are done for hadd. iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
+    print('%s \t Jobs are done for hadd. iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
+
+iJobSubmission = 0
+while iJobSubmission <= nResubmissionMax:
+    print('\n\n%s \t Startiing iJobSubmission for hadd_stage1: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
+    condor_hadd.initialize_list()
+    inputdir = DestinationDir
+    outputdir = os.path.join(inputdir, 'hadd', 'output')
+    if not os.path.exists(outputdir): os.makedirs(outputdir)
+    configdir = outputdir.replace('output', 'config')
+    if not os.path.exists(configdir): os.makedirs(configdir)
+    sOpRootFile_to_use    = os.path.join(outputdir, f'hadd_stage1.root')
+    sConfig_to_use        = sOpRootFile_to_use.replace('.root', '_config.json').replace('output', 'config')
+    condordir = outputdir.replace('output','condor')
+    if not os.path.exists(condordir): os.makedirs(condordir)
+    sCondorExec_to_use    = sOpRootFile_to_use.replace('.root', '_condor_exec.sh').replace('output', 'condor')
+    sCondorSubmit_to_use  = sOpRootFile_to_use.replace('.root', '_condor_submit.sh').replace('output', 'condor')
+    sCondorLog_to_use     = sOpRootFile_to_use.replace('.root', '_condor.log').replace('output', 'condor')
+    sCondorOutput_to_use  = sOpRootFile_to_use.replace('.root', '_condor.out').replace('output', 'condor')
+    sCondorError_to_use   = sOpRootFile_to_use.replace('.root', '_condor.error').replace('output', 'condor')
+    condor_hadd.initialize_files(sOpRootFile_to_use, configdir,
+                                 sConfig_to_use, condordir, sCondorExec_to_use,
+                                 sCondorSubmit_to_use, sCondorLog_to_use, sCondorOutput_to_use,
+                                 sCondorError_to_use
+                             )
+    jobStatus = condor_hadd.check_jobstatus(printLevel >= 3)
+    config = {}
+    if jobStatus == 1: break
+    if jobStatus == 0:
+        config["inputdir"] = inputdir
+        config["outputFile"] = sOpRootFile_to_use
+        config['wildcard'] = '*/output/hadd*.root'
+        with open(condor_hadd.sConfig_to_use, "w") as fConfig:
+            json.dump( config,  fConfig, indent=4)
+        condor_hadd.writeCondorExecFile(f'-p {config["inputdir"]} -o {config["outputFile"]} -w {config["wildcard"]}')
+    if jobStatus in [0, 3, 4, 5]: #[0, 3, 4]:                                              
+        if jobStatus == [3, 5]:
+            # save previos .out and .error files with another names                                     
+            sCondorOutput_vPrevious = sCondorOutput_to_use.replace('.out', '_v%d.out' % (iJobSubmission-1))
+            sCondorError_vPrevious  = sCondorError_to_use.replace('.error', '_v%d.error' % (iJobSubmission-1))
+            os.rename(condor_hadd.sCondorOutput_to_use, sCondorOutput_vPrevious)
+            os.rename(condor_hadd.sCondorError_to_use,  sCondorError_vPrevious)
+        increaseJobFlavour = False
+        if jobStatus == 4:
+            increaseJobFlavour = True
+        condor_hadd.writeCondorSumitFile(increaseJobFlavour)
+    else:
+        assert(jobStatus == 2)
+        # job is either running or succeeded                                                            
+        continue
+    if jobStatus in [0,3,4,5]:
+        if run_mode == 'condor':
+            cmd1 = "condor_submit %s" % condor_hadd.sCondorSubmit_to_use
+            print("Now:  %s " % cmd1)
+            if not dryRun:
+                os.system(cmd1)
+        else:
+            pass
+    if len(condor_hadd.OpRootFiles_Target) == len(condor_hadd.OpRootFiles_Exist):
+        break
+    else:
+        time.sleep( ResubWaitingTime * 60 )
+
+with open(condor_hadd.fJobSubLog, 'a') as fJobSubLog:
+        fJobSubLog.write('%s \t Jobs are done for hadd_stage2. iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
+print('%s \t Jobs are done for hadd_stage2. iJobSubmission: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
+sys.exit()
+if 1:#do_hadd:
     if run_file == 'count_genweight':
         outputfile = 'hadd_countgenWeight.root'
+    elif run_file == 'stitch':
+        outputfile = 'hadd_stitch.root'
     else:
-        outputfile = 'hadd.root'
+        outputfile = 'hadd_apply_stitch.root'
     cmd = f'python3 hadd.py -p {DestinationDir} -o {outputfile}'
     os.system(cmd)
