@@ -54,6 +54,9 @@ def getprocess_name(datasetName_parts):
     campaign = datasetName_parts[1]#.split('-')[0]
     name = datasetName_parts[0]
     ret = name.split('_Tune')[0]
+    if re.findall('Run2018[A-D]', datasetName_parts[1]):
+        ret += datasetName_parts[1].split('-')[0]
+        return ret
     if 'PSWeights' in name:
         ret += '_PSWeights'
     if 'ext' in campaign:
@@ -75,6 +78,8 @@ def getsample_category(name):
         return 'QCD'
     elif name.startswith('ZZ') or name.startswith('ZJets'):
         return 'Z'
+    elif 'Run' in name:
+        return 'data_obs'
     else:
         print(name)
         assert(0)
@@ -156,7 +161,10 @@ if __name__ == '__main__':
         sampleDetails_dict[sSumEvents] = sumEvents
         sampleDetails_dict[sNanoAOD_nFiles] = nFiles
         sampleDetails_dict[pn] = getprocess_name(datasetName_parts)
-        sampleDetails_dict[sc] = getsample_category(datasetName_parts[0])
+        if 'Run20' not in datasetName_parts[1]:
+            sampleDetails_dict[sc] = getsample_category(datasetName_parts[0])
+        else:
+            sampleDetails_dict[sc] = 'data_obs'
         sampleDetails_dict[sNanoAOD] = files
         samples_details[datasetName] = sampleDetails_dict
 
