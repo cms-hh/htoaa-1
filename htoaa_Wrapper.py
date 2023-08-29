@@ -164,18 +164,24 @@ if __name__ == '__main__':
                         config["outputFile"] = condor_ana.sOpRootFile_to_use 
                         config["sampleCategory"] = sample_category
                         config['process_name'] = process_name
-                        config["isMC"] = (sample_category != kData)
+                        config["isMC"] = 1 if (sample_category != kData) else 0
                         #config["Luminosity"] = Luminosity
                         config["nEvents"] = sample_nEvents
                         if (sample_category != kData):
                             config["crossSection"] = sample_cossSection
                             config["sumEvents"] = sample_sumEvents
                             if applystitching:
-                                if sample_category == 'WJets':
+                                if sample_category == 'WJets' and 'WJetsToQQ' not in config['process_name']:
                                     config['applystitching'] = True
                         else:
                             del config["crossSection"]
                             del config["sumEvents"]
+                            if 'EGamma' in config['process_name']:
+                                config['use_triggers_1mu'] = False
+                                config['use_triggers_jet'] = False
+                            elif 'SingleMuon' in config['process_name']:
+                                config['use_triggers_1e'] = False
+                                config['use_triggers_jet'] = False
 
                         with open(condor_ana.sConfig_to_use, "w") as fConfig:
                             json.dump( config,  fConfig, indent=4)
@@ -193,7 +199,6 @@ if __name__ == '__main__':
                         increaseJobFlavour = False
                         if jobStatus == 4:
                             increaseJobFlavour = True
-
                         condor_ana.writeCondorSumitFile(increaseJobFlavour)
 
                     if jobStatus in [1, 2]:

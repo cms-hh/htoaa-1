@@ -72,11 +72,13 @@ config_Template = OD([
     ("inputFiles", ''),
     ("outputFile", ''),
     ("sampleCategory", ''),
-    ("isMC", False),
+    ("isMC", 0),
     #("Luminosity", 0),
     ("crossSection", 0),
     ("nEvents", -1),
     ("sumEvents", -1),
-    ("downloadIpFiles", False),
-    ("applystitching", False)
+    ("applystitching", False),
+    ('use_triggers_1e', True),
+    ('use_triggers_1mu', True),
+    ('Triggers_1e', [])
 ])

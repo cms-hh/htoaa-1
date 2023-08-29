@@ -84,7 +84,7 @@ class condor():
             (6, 'nextweek'),
         ])
         #iJobFlavour = 2 # 2, 'longlunch' 2 hours
-        iJobFlavour = 1 # 1, 'microcentury' 
+        iJobFlavour = 1 # 1, 'microcentury'
         if increaseJobFlavour: iJobFlavour += 1
 
         #if not os.path.isfile(condor_submit_file):
@@ -173,9 +173,9 @@ class condor():
                     # check wheter sCondorError does not exist due to Job was aborted
                     jobStatus = 4 # job aborted
                     if verbose:
-                        print(f"  jobStatus = 4")
+                        print(f"  jobStatus = 4 for {self.sOpRootFile_to_use}")
                 # check if job failed due to XRootD error
-            if isCondorErrorExist:
+            elif isCondorErrorExist:
                 if (self.searchStringInFile(
                         sFileName       = self.sCondorError_to_use,
                         searchString    = 'OSError: XRootD error: [ERROR]', 
