@@ -10,12 +10,13 @@ with open(old_file) as fSamplesInfo:
         samplesInfo = json.load(fSamplesInfo) # Samples_Era.json
 
 def get_histvalue(proc):
-    with uproot.open('hadd_countgenWeight.root') as f:
+    with uproot.open('data/countsumevents.root') as f:
         for key in f['evt'].keys():
             proc_name = str(f['evt'][key].name, encoding)
             if proc_name != proc: continue
             hist = f[f'evt/{proc_name}/hCutFlow_central']
             return hist.values[1]
+        return -1
 
 for idx1, sample_info in enumerate(samplesInfo):
         samplesInfo[sample_info]['sumEvents'] = get_histvalue(samplesInfo[sample_info]['process_name'])
