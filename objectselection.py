@@ -55,7 +55,7 @@ class ObjectSelection:
         mask = ((events.FatJet.pt >= self.FatJetPtThsh)
                 & (abs(events.FatJet.eta) <= self.FatJetEtaThsh)
                 & (events.FatJet.msoftdrop >= self.FatJetMSoftDropThshLow)
-                & (events.FatJet.deepTagMD_bbvsLight >= 0.98)
+                #& (events.FatJet.deepTagMD_bbvsLight >= 0.98)
                 )
         return events.FatJet[mask]
 
@@ -65,8 +65,9 @@ class ObjectSelection:
                 (events.Muon.dxy < 0.05) &
                 (events.Muon.dz < 0.1 ) &
                 (events.Muon.miniPFRelIso_all < 0.4) &
-                (events.Muon.sip3d <8 ) &
-                (events.Muon.mvaTTH >= 0.5)
+                (events.Muon.sip3d <8 )
+                & (events.Muon.mediumId)
+                #& (events.Muon.mvaTTH >= 0.5)
         )
 
         return events.Muon[mask]
@@ -77,8 +78,9 @@ class ObjectSelection:
                 (events.Electron.dxy < 0.05) &
                 (events.Electron.dz < 0.1 ) &
                 (events.Electron.miniPFRelIso_all < 0.4) &
-                (events.Electron.sip3d <8 ) &
-                (events.Electron.mvaTTH >= 0.3)
+                (events.Electron.sip3d <8 )
+                & (events.Electron.mvaFall17V2noIso_WP90)
+                #& (events.Electron.mvaTTH >= 0.3)
         )
 
         return events.Electron[mask]
