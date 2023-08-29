@@ -70,9 +70,8 @@ class HToAATo4bProcessor(processor.ProcessorABC):
     def __init__(self, datasetInfo={}):
 
         ak.behavior.update(nanoaod.behavior)
-        self.datasetInfo = datasetInfo
-        #self.isMC = isMC
-        self.objectSelector = ObjectSelection(era=self.datasetInfo["era"])
+        self.config = datasetInfo
+        self.objectSelector = ObjectSelection(era=self.config["era"])
         dataset_axis    = hist.Cat("dataset", "Dataset")
         systematic_axis = hist.Cat("systematic", "Systematic Uncertatinty")
 
@@ -136,14 +135,8 @@ class HToAATo4bProcessor(processor.ProcessorABC):
 
     def process(self, events):
         dataset = events.metadata["dataset"] # dataset label
-        self.datasetInfo[dataset]['isSignal'] = False
-        self.datasetInfo[dataset]['isQCD'] = False
-
-        events = apply_metfilters(self.datasetInfo[dataset]['isMC'], events)
-        if self.datasetInfo[dataset]['isMC']:
-            self.datasetInfo[dataset]['isSignal'] = True if "HToAATo4B" in dataset else False
-            self.datasetInfo[dataset]['isQCD']    = True if "QCD"       in dataset else False
-            
+        events = apply_metfilters(self.config['isMC'], events)
+        if self.config['isMC']:
             output = self.accumulator.identity()
             systematics_shift = [None]
             for _syst in systematics_shift:
@@ -165,7 +158,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         # Gen-level selection ---------------------------------------------------------------------
         genHiggs = None
         genHT    = None
-        if self.datasetInfo[dataset]['isMC'] and self.datasetInfo[dataset]['isSignal']: 
+        if self.config['isSignal']:
             genHiggs  = self.objectSelector.selectGenHiggs(events)        
             genHT     = self.objectSelector.GenHT(events)
             # m(bbar from A) and m(4b from HToAA) ----------
@@ -196,7 +189,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             LVGenB_1 = genparticle(events, genBBar_pairs['b'], 1)
             LVGenBbar_1 = genparticle(events, genBBar_pairs['bbar'], 1) 
         # QCD MC ----------------------------------------------
-        if self.datasetInfo[dataset]['isMC'] and self.datasetInfo[dataset]['isQCD'] :
+        if self.config['isQCD'] :
             genBQuarks_QCD = events.GenPart[(
                 (abs(events.GenPart.pdgId) == 5)
             )]
@@ -216,26 +209,46 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 "FatJet",
                 "lep",
                 "met"
+                ,'triggered'
+                , 'trigObj_matched_lep'
                 #"ak4Jet"
             ]),
         ])
+        if self.config['isMC'] == 0:
+            sel_names_all['SR'].append('dataset_check')
         # reconstruction level cuts for cut-flow table. Order of cuts is IMPORTANT
         cuts_reco = ["dR_LeadingFatJet_GenB_0p8"] + sel_names_all["SR"] #.copy()
         selection = PackedSelection()
         FatJet = self.objectSelector.selectFatJets(events)
         ak4Jet = self.objectSelector.selectak4Jets(events)
-        ele = self.objectSelector.selectElectrons(events)
-        mu = self.objectSelector.selectMuons(events)
+        preselele = self.objectSelector.selectElectrons(events)
+        preselmu = self.objectSelector.selectMuons(events)
+        fakeele = preselele[preselele.mvaTTH < 0.3]
+        fakemu = preselmu[preselmu.mvaTTH < 0.5]
+        is_triggered_1ele = events.HLT.Ele32_WPTight_Gsf
+        is_triggered_1mu = events.HLT.IsoMu24 | events.HLT.IsoMu27
+        sel_triggered_1ele = (self.config['use_triggers_1e']) & is_triggered_1ele
+        sel_triggered_1mu = (self.config['use_triggers_1mu']) & is_triggered_1mu
+        ele = preselele[preselele.mvaTTH >= 0.3]
+        mu = preselmu[preselmu.mvaTTH >= 0.5]
         lep = ak.with_name(
                 ak.concatenate([mu, ele], axis=1), "PtEtaPhiMCandidate"
             )
+        lep = lep[:, 0:1]
+        #https://github.com/HEP-KBFI/cmssw/blob/master/PhysicsTools/NanoAOD/python/triggerObjects_cff.py#L94 
+        trig_obj_ele = (abs(events.TrigObj.id) == 11) & ((events.TrigObj.filterBits & 2)==2)
+        trig_obj_mu = (abs(events.TrigObj.id) == 13) & ((events.TrigObj.filterBits & 8)==8)
+        sel_ele = abs(lep.pdgId) == 11
+        sel_mu = abs(lep.pdgId) == 13
+        trigObj_matched_ele = ak.any(events.TrigObj[trig_obj_ele].metric_table(lep[sel_ele])<0.4, axis=-1)
+        trigObj_matched_mu = ak.any(events.TrigObj[trig_obj_mu].metric_table(lep[sel_mu])<0.4, axis=-1)
         lep_et = np.sqrt(lep.mass * lep.mass + lep.px * lep.px + lep.py * lep.py)
         m = met_p4(events)
         #nu_et = np.sqrt(m.px * m.px + m.py*m.py)
         mt_W = lep.mass * lep.mass +  2* (lep.pt*m.pt -(lep.px *m.px + lep.py * m.py))
         # create a PackedSelection object
         # this will help us later in composing the boolean selections easily
-        if self.datasetInfo[dataset]['isMC'] and self.datasetInfo[dataset]['isSignal']:
+        if self.config['isSignal']:
             sel_names_GEN = ["1GenHiggs", "2GenA", "2GenAToBBbarPairs", "dR_GenH_GenB_0p8"]
             FatJet = FatJet[(FatJet.delta_r(LVGenB_0) <0.8)
                             & (FatJet.delta_r(LVGenB_1) <0.8)
@@ -258,8 +271,14 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             selection.add("lep", ak.num(lep) == 1)
         if 'met' in sel_names_all["SR"]:
             selection.add("met", events.MET.pt > 20)
+        if 'triggered' in sel_names_all["SR"]:
+            selection.add("triggered", sel_triggered_1ele | sel_triggered_1mu)
+        if 'dataset_check' in sel_names_all["SR"]:
+            selection.add("dataset_check", (sel_triggered_1ele & is_triggered_1mu)==0)
         if 'ak4Jet' in sel_names_all["SR"]:
             selection.add("ak4Jet", ak.num(ak4Jet) < 1)
+        if 'trigObj_matched_lep' in sel_names_all["SR"]:
+            selection.add("trigObj_matched_lep", (ak.any(trigObj_matched_ele, axis=-1) & (sel_triggered_1ele)) | (ak.any(trigObj_matched_mu, axis=-1) & sel_triggered_1mu ))
         # useful debugger for selection efficiency
         sel_SR           = selection.all(* sel_names_all["SR"])
         ################
@@ -267,51 +286,52 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         ################
         # create a processor Weights object, with the same length as the number of events in the chunk
         weights     = Weights(len(events))
-        weights_gen = Weights(len(events))
-        genweight_unique = set(events.genWeight)
-        count = {}
-        for gu in genweight_unique:
-            count[gu] = ak.sum(ak.where(events.genWeight==gu, 1,0))
-        count = sorted([(k,v) for k,v in count.items()], key=lambda kv: kv[1], reverse=True)
-        events.genWeight = ak.where(events.genWeight >3*count[0][0], 3*count[0][0], events.genWeight)
-        stitch = np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
-        if self.datasetInfo[dataset]["stitching"]:
-            for idx_pt, (k_pt,v_pt) in enumerate(pt.items()):
-                pt_min = v_pt[0]
-                if len(v_pt) > 1:
-                    pt_max = v_pt[1]
-                else:
-                    pt_max = 10000000000
+        if self.config['isMC']:
+            weights_gen = Weights(len(events))
+            genweight_unique = set(events.genWeight)
+            count = {}
+            for gu in genweight_unique:
+                count[gu] = ak.sum(ak.where(events.genWeight==gu, 1,0))
+            count = sorted([(k,v) for k,v in count.items()], key=lambda kv: kv[1], reverse=True)
+            events.genWeight = ak.where(events.genWeight >3*count[0][0], 3*count[0][0], events.genWeight)
+            stitch = np.full(len(events), self.config["lumiScale"])
+            if self.config["applystitching"]:
+                for idx_pt, (k_pt,v_pt) in enumerate(pt.items()):
+                    pt_min = v_pt[0]
+                    if len(v_pt) > 1:
+                        pt_max = v_pt[1]
+                    else:
+                        pt_max = 10000000000
                     for idx_njet, (k_njet,v_njet) in enumerate(njet.items()):
                         njet_min = v_njet
                         stitch = ak.where((events.LHE.HT>=pt_min)&(events.LHE.HT<pt_max)&(events.LHE.Njets==njet_min), 59.83*1000*stitchinginfo[k_pt][k_njet]['xs']/stitchinginfo[k_pt][k_njet]['nevent'] if stitchinginfo[k_pt][k_njet]['nevent'] else stitch, stitch)
 
-        if self.datasetInfo[dataset]["isMC"]:
-            if not self.datasetInfo[dataset]["stitching"]:
+        if self.config["isMC"]:
+            if not self.config["applystitching"]:
                 weights.add(
                     "lumiWeight",
-                    weight=np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
+                    weight=np.full(len(events), self.config["lumiScale"])
                 )
                 weights_gen.add(
                     "lumiWeight",
-                    weight=np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
+                    weight=np.full(len(events), self.config["lumiScale"])
                 )
             else:
                 weights.add(
                     "lumiWeight",
-                    weight=stitch#np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
+                    weight=stitch
                 )
                 weights_gen.add(
                     "lumiWeight",
-                    weight=stitch#np.full(len(events), self.datasetInfo[dataset]["lumiScale"])
+                    weight=stitch
                 )
             weights.add(
                 "genWeight",
-                weight=events.genWeight#np.copysign(np.ones(len(events)), events.genWeight)
+                weight=events.genWeight
             )
             weights_gen.add(
                 "genWeight",
-                weight=events.genWeight#np.copysign(np.ones(len(events)), events.genWeight)
+                weight=events.genWeight
             )
             weights.add(
                 "btagWeight",
@@ -330,7 +350,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         # FILL HISTOGRAMS
         ###################
         systList = []
-        if self.datasetInfo[dataset]['isMC']:
+        if self.config['isMC']:
             if shift_syst is None:
                 systList = [
                     "central"
@@ -384,23 +404,24 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 systematic=syst,
                 weight=evtWeight[sel_SR]
             )
-            output['LHE_HT_gen'].fill(
-                dataset=dataset,
-                LHE_HT=(events.LHE.HT),
-                systematic=syst,
-                weight=evtWeight_gen
-            )
-            output['LHE_Njet_gen'].fill(
-                dataset=dataset,
-                LHE_Njet=(events.LHE.Njets),
-                systematic=syst,
-                weight=evtWeight_gen
-            )
-            output['genweight'].fill(
-                dataset=dataset,
-                genWeight=(events.genWeight),
-                systematic=syst
-            )
+            if self.config['isMC'] == 1:
+                output['LHE_HT_gen'].fill(
+                    dataset=dataset,
+                    LHE_HT=(events.LHE.HT),
+                    systematic=syst,
+                    weight=evtWeight_gen
+                )
+                output['LHE_Njet_gen'].fill(
+                    dataset=dataset,
+                    LHE_Njet=(events.LHE.Njets),
+                    systematic=syst,
+                    weight=evtWeight_gen
+                )
+                output['genweight'].fill(
+                    dataset=dataset,
+                    genWeight=(events.genWeight),
+                    systematic=syst
+                )
             output['hLeadingFatJetMSoftDrop'].fill(
                 dataset=dataset,
                 Mass=(ak.flatten(FatJet.msoftdrop[sel_SR][:, 0:1])),
@@ -452,21 +473,20 @@ if __name__ == '__main__':
     print("Config {}: \n{}".format(sConfig, json.dumps(config, indent=4)))
 
     lumiScale = 1
-    sInputFiles         = config["inputFiles"]
-    sOutputFile         = config["outputFile"]
+    sInputFiles         = config.pop("inputFiles")
+    sOutputFile         = config.pop("outputFile")
     sample_category     = config['sampleCategory']
-    process_name        = config['process_name']
-    isMC                = config["isMC"]
-    era                 = config['era']
-    applystitching      = config['applystitching']
-    if isMC:
-        luminosity          = Luminosities[era][0]
-        sample_crossSection = config["crossSection"]
-        sample_nEvents      = config["nEvents"]
-        sample_sumEvents    = config["sumEvents"] if config["sumEvents"] != -1 else sample_nEvents
+    process_name        = config.pop('process_name')
+    if config['isMC']:
+        luminosity          = Luminosities[config['era']][0]
+        sample_crossSection = config.pop("crossSection")
+        sample_nEvents      = config.pop("nEvents")
+        sample_sumEvents    = config.pop("sumEvents") if config["sumEvents"] != -1 else sample_nEvents
         if sample_sumEvents == -1: sample_sumEvents = 1 # Case when sumEvents is not calculated
         lumiScale = calculate_lumiScale(luminosity=luminosity, crossSection=sample_crossSection, sumEvents=sample_sumEvents)
-
+    config['lumiScale'] = lumiScale
+    config['isSignal'] = 'SUSY' in process_name
+    config['isQCD'] = 'QCD'in process_name
     sInputFiles_toUse = []
     for sInputFile in sInputFiles:
         if "*" in sInputFile:
@@ -501,10 +521,7 @@ if __name__ == '__main__':
         fileset={sample_category: sInputFiles},
         treename="Events",
         processor_instance=HToAATo4bProcessor(
-            datasetInfo={
-                "era": era,
-                sample_category: {"isMC": isMC, "lumiScale": lumiScale, "stitching":applystitching}
-            }
+            datasetInfo=config
         )
     )
 
@@ -543,5 +560,6 @@ if __name__ == '__main__':
     totalTime_min = totalTime - float(totalTime_hr * 60)
     totalTime_min = int(totalTime_min/60)
     totalTime_sec = totalTime - float(totalTime_hr * 60*60) - float(totalTime_min * 60)
-    os.system(f'rm -r /tmp/snandan/inputFiles/{process_name}')
+    for f in sInputFiles:
+        os.system(f'rm {f}')
     print(f"Total run time: {totalTime_hr}h {totalTime_min}m {totalTime_sec}s = {totalTime}sec ")
