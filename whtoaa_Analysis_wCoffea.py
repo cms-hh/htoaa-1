@@ -229,11 +229,16 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         is_triggered_1mu = events.HLT.IsoMu24 | events.HLT.IsoMu27
         sel_triggered_1ele = (self.config['use_triggers_1e']) & is_triggered_1ele
         sel_triggered_1mu = (self.config['use_triggers_1mu']) & is_triggered_1mu
-        ele = preselele[preselele.mvaTTH >= 0.3]
-        mu = preselmu[preselmu.mvaTTH >= 0.5]
+        if self.config['leptonselection'] == 'Tight':
+            ele = preselele[preselele.mvaTTH >= 0.3]
+            mu = preselmu[preselmu.mvaTTH >= 0.5]
+        else:
+            ele = preselele[preselele.mvaTTH < 0.3]
+            mu = preselmu[preselmu.mvaTTH < 0.5]
         lep = ak.with_name(
                 ak.concatenate([mu, ele], axis=1), "PtEtaPhiMCandidate"
             )
+        lep = lep[ak.argsort(lep.pt, axis=-1, ascending=False)]
         lep = lep[:, 0:1]
         #https://github.com/HEP-KBFI/cmssw/blob/master/PhysicsTools/NanoAOD/python/triggerObjects_cff.py#L94 
         trig_obj_ele = (abs(events.TrigObj.id) == 11) & ((events.TrigObj.filterBits & 2)==2)
@@ -270,7 +275,8 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         if 'lep' in sel_names_all["SR"]:
             selection.add("lep", ak.num(lep) == 1)
         if 'met' in sel_names_all["SR"]:
-            selection.add("met", events.MET.pt > 20)
+            selection.add("met", events.MET.pt >= 20 if "GE" in self.config["met"]\
+                          else events.MET.pt < 20)
         if 'triggered' in sel_names_all["SR"]:
             selection.add("triggered", sel_triggered_1ele | sel_triggered_1mu)
         if 'dataset_check' in sel_names_all["SR"]:
