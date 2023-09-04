@@ -60,7 +60,7 @@ class ObjectSelection:
         return events.FatJet[mask]
 
     def selectMuons(self, events):
-        mask = ((events.Muon.pt >5) &
+        mask = ((events.Muon.pt >25) &
                 (abs(events.Muon.eta) < 2.4) &
                 (events.Muon.dxy < 0.05) &
                 (events.Muon.dz < 0.1 ) &
@@ -73,7 +73,7 @@ class ObjectSelection:
         return events.Muon[mask]
 
     def selectElectrons(self, events):
-        mask = ((events.Electron.pt >7) &
+        mask = ((events.Electron.pt > 33) &
                 (abs(events.Electron.eta) < 2.3) &
                 (events.Electron.dxy < 0.05) &
                 (events.Electron.dz < 0.1 ) &
