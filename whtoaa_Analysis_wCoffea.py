@@ -1,3 +1,4 @@
+#https://cms.cern.ch/iCMS/analysisadmin/cadilines?line=HIG-18-026&tp=an&id=2158&ancode=HIG-18-026
 #htoaa analysis main code
 
 import os
@@ -217,7 +218,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         if self.config['isMC'] == 0:
             sel_names_all['SR'].append('dataset_check')
         # reconstruction level cuts for cut-flow table. Order of cuts is IMPORTANT
-        cuts_reco = ["dR_LeadingFatJet_GenB_0p8"] + sel_names_all["SR"] #.copy()
         selection = PackedSelection()
         FatJet = self.objectSelector.selectFatJets(events)
         ak4Jet = self.objectSelector.selectak4Jets(events)
@@ -263,7 +263,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             selection.add("1GenHiggs", ak.num(genHiggs) == 1)
             selection.add("2GenA", ak.num(genACollection) == 2)
             selection.add("2GenAToBBbarPairs", ak.num(genBBar_pairs) == 2)
-
         FatJet = FatJet[ak.all(FatJet.metric_table(lep)>0.8, axis=-1)]
         if "nPV" in sel_names_all["SR"]:
             selection.add("nPV", events.PV.npvsGood >= 1)
