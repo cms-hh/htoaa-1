@@ -5,16 +5,16 @@ import argparse
 parser = argparse.ArgumentParser(description='htoaa analysis wrapper')
 parser.add_argument('-p', dest='input_path', type=str, required=True)
 parser.add_argument('-o', dest='output_file', type=str, required=True)
-parser.add_argument('-w', dest='wildcard', type=str, default='*root')
+parser.add_argument('-w', dest='wildcard', type=str, default='ana')
 args=parser.parse_args()
 
 p = args.input_path
 output_file = args.output_file
 wc = args.wildcard
-
-files = glob.glob(f'{p}/{wc}')
+files = glob.glob(f'{p}/{wc}*root')
 nfiles=5
 dohadd = True
+assert(len(files))
 count = 0
 final_hadd = ''
 outputdir = output_file[:output_file.rfind('/')]
