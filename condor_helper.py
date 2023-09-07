@@ -145,6 +145,7 @@ class condor():
         isCondorLogExist     = os.path.isfile(self.sCondorLog_to_use)
         isCondorOutputExist  = os.path.isfile(self.sCondorOutput_to_use)
         isCondorErrorExist   = os.path.isfile(self.sCondorError_to_use)
+        execfile = self.sCondorExec_to_use.split('/')[-1]
         if not isConfigExist:
             jobStatus = 0 # job not yet submitted
             if verbose:
@@ -154,6 +155,10 @@ class condor():
             self.OpRootFiles_Exist.append(self.sOpRootFile_to_use)
             if verbose:
                 print(f"  jobStatus = 1")
+        elif not os.system(f'condor_q -nobatch | grep {execfile}'):
+            jobStatus = 2 # job is running
+            if verbose:
+                print(f"  jobStatus = 2 for {self.sOpRootFile_to_use}")
         else:
             if isCondorLogExist:
                 if (self.searchStringInFile(
@@ -189,10 +194,6 @@ class condor():
                     jobStatus = 5 # job failed due to XRootD error
                     if verbose:
                         print(f"  jobStatus = 5")
-            else:
-                jobStatus = 2 # job is running
-                if verbose:
-                    print(f"  jobStatus = 2 for {self.sOpRootFile_to_use}")
         self.OpRootFiles_Target.append(self.sOpRootFile_to_use)
         if jobStatus in jobStatusForJobSubmission : # [0, 3, 4]:
             self.OpRootFiles_iJobSubmission.append(self.sOpRootFile_to_use)
