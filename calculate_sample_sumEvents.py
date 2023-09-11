@@ -10,7 +10,7 @@ def calculate_samples_sum_event(samplesInfo):
     for idx1, sample_info in enumerate(samplesInfo):
         #samplesInfo[sample_info]['sumEvents'] = get_histvalue(samplesInfo[sample_info]['process_name'])
         proc = samplesInfo[sample_info]['process_name']
-        if 'QCD' in proc: continue
+        #if 'QCD' in proc: continue
         proc_1_mod = proc.lower()
         sample_exist = check_sample(proc, samples_sum)
         if sample_exist[0]: continue
@@ -20,7 +20,7 @@ def calculate_samples_sum_event(samplesInfo):
                 if not (idx2 > idx1): continue
                 add_sample = False
                 proc_2 = samplesInfo[sample_info_2]['process_name']
-                if 'QCD' in proc_2: continue
+                #if 'QCD' in proc_2: continue
                 proc_2_mod = proc_2.lower()
                 if proc_1_mod == proc_2_mod:
                         add_sample = True
