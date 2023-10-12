@@ -15,13 +15,15 @@ if __name__ == '__main__':
     parser.add_argument('-run_mode',          type=str, default='local', choices=['local', 'condor'])
     parser.add_argument('-v', '--version',    type=str, default=None, required=True)
     parser.add_argument('-samples',           type=str, default=None, help='samples to run seperated by comma')
-    parser.add_argument('-nFilesPerJob',      type=int, default=10)
+    parser.add_argument('-nFilesPerJob',      type=int, default=8)
     parser.add_argument('-nResubMax',         type=int, default=80)
-    parser.add_argument('-ResubWaitingTime',  type=int, default=15, help='Resubmit failed jobs after every xx minutes')
+    parser.add_argument('-ResubWaitingTime',  type=int, default=5, help='Resubmit failed jobs after every xx minutes')
     parser.add_argument('-iJobSubmission',    type=int, default=0,  help='Job submission iteration. Specify previous last job submittion iteration if script terminated for some reason.')
     parser.add_argument('-dryRun',            action='store_true', default=False)
     parser.add_argument('-rf', '--run_file',    type=str, default='analysis', choices=['analysis', 'count_genweight', 'stitch'])
     parser.add_argument('-as', '--applystitching', action='store_false', default=True)
+    parser.add_argument('-ls', dest='lepton_selection', type=str, required=True)
+    parser.add_argument('-ms', dest='msoftdrop', type=str, nargs='+', required=True)
 
     args=parser.parse_args()
     print("args: {}".format(args))
@@ -45,5 +47,7 @@ if __name__ == '__main__':
         dryRun           = args.dryRun,
         run_file         = args.run_file,
         applystitching   = args.applystitching,
-        sAnalysis        = sAnalysis
+        sAnalysis        = sAnalysis,
+        lepton_selection = args.lepton_selection,
+        msoftdrop        = args.msoftdrop
     )
