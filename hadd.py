@@ -1,4 +1,4 @@
-import glob
+from glob import glob
 import os
 import argparse
 
@@ -11,7 +11,7 @@ args=parser.parse_args()
 p = args.input_path
 output_file = args.output_file
 wc = args.wildcard
-files = glob.glob(f'{p}/{wc}*root')
+files = glob(f'{p}/{wc}*root')
 nfiles=5
 dohadd = True
 assert(len(files))
