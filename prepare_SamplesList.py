@@ -70,14 +70,28 @@ def getsample_category(name):
     name = name.split('_Tune')[0]
     if name.startswith('TT'):
         return 'TT'
+    elif name.startswith('ttH'):
+        return 'ttH'
+    elif name.startswith('TTGJets'):
+        return 'TTGJets'
+    elif name.startswith('ST'):
+        return 'ST'
     elif name.startswith('WJet') or re.findall('^W[0-4]Jets', name):
         return 'WJets'
     elif name.startswith('SUSY'):
         return name
     elif name.startswith('QCD'):
         return 'QCD'
-    elif name.startswith('ZZ') or name.startswith('ZJets'):
+    elif name.startswith('ZJets'):
         return 'Z'
+    elif name.startswith('WZTo'):
+        return 'WZ'
+    elif name.startswith('WZZ'):
+        return 'WZZ'
+    elif name.startswith('ZZZ'):
+        return 'ZZZ'
+    elif name.startswith('ZZTo'):
+        return 'ZZ'
     elif 'Run' in name:
         return 'data_obs'
     else:
