@@ -34,7 +34,9 @@ class analysis_wrapper():
                  iJobSubmission,
                  dryRun, run_file,
                  applystitching,
-                 sAnalysis
+                 sAnalysis,
+                 lepton_selection,
+                 msoftdrop
         ):
         self.era = era
         self.run_mode = run_mode
@@ -48,6 +50,8 @@ class analysis_wrapper():
         self.run_file = run_file
         self.applystitching = applystitching
         self.sAnalysis = sAnalysis
+        self.lepton_selection = lepton_selection
+        self.msoftdrop = msoftdrop
 
         self.pwd = os.getcwd()
         self.DestinationDir = "./%s" % (anaVersion)
@@ -78,6 +82,8 @@ class analysis_wrapper():
         if self.dryRun: sys.exit()
         self.run_haddJobs(stage=1)
         self.run_haddJobs(stage=1.5)
+        if 'data_obs' in self.selSamplesToRun_list:
+            self.run_addBackgrounds()
 
     def run_analysisJobs(self):
         condor_ana = condor(self.sAnalysis, self.sFileJobSubLog)
@@ -86,88 +92,92 @@ class analysis_wrapper():
             if self.dryRun and iJobSubmission >0: break
             condor_ana.initialize_list()
             print('\n\n%s \t Startiing iJobSubmission for analysis: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
-            for leptonselection in ['Fake', 'Tight']:
-                for met in ['met_GE20', 'met_L20']:
-                    #condor_ana.initialize_list()
-                    samples_sum_events = calculate_samples_sum_event(self.samplesInfo)
-                    for dbsname, sampleInfo in self.samplesInfo.items():
-                        sample_category = sampleInfo['sample_category']
-                        process_name = sampleInfo['process_name']
-                        if len(self.selSamplesToRun_list) > 0:
-                            skipThisSample = True
-                            for selSample in self.selSamplesToRun_list:
-                                if not self.applystitching:
-                                    if sample_category == 'WJets' and (re.findall('^W[1-4]Jets', process_name) or ('HT-' in process_name)):
-                                        break
-                                if leptonselection == 'Fake' and 'SUSY' in process_name:
-                                    break
-                                elif selSample in process_name or selSample in sample_category:
-                                    skipThisSample= False
-                                    break
-                        if skipThisSample:
-                            continue
+            #for leptonselection in ['Tight']:
+            #for met in ['met_GE20', 'met_L20']:
+            ##condor_ana.initialize_list()
+            samples_sum_events = calculate_samples_sum_event(self.samplesInfo)
+            for dbsname, sampleInfo in self.samplesInfo.items():
+                sample_category = sampleInfo['sample_category']
+                process_name = sampleInfo['process_name']
+                if len(self.selSamplesToRun_list) > 0:
+                    skipThisSample = True
+                    for selSample in self.selSamplesToRun_list:
+                        if 'TTG' in process_name: break
+                        #if 'Enriched' not in process_name: break
+                        if not self.applystitching:
+                            if sample_category == 'WJets' and (re.findall('^W[1-4]Jets', process_name) or ('HT-' in process_name)):
+                                break
+                            #if leptonselection == 'Fake' and 'SUSY' in process_name:
+                            #break
+                        if selSample in process_name or selSample in sample_category:
+                            skipThisSample= False
+                            break
+                if skipThisSample:
+                    continue
 
-                        fileList = sampleInfo[sampleFormat]
-                        files = []
-                        for iEntry in fileList:
-                            if "*" in iEntry:
-                                files.extend( glob.glob( iEntry ) )
-                            else:  files.append( iEntry )
-                        sample_cossSection = sampleInfo["cross_section"] if (sample_category != kData) else None
-                        sample_nEvents     = sampleInfo["nEvents"]
-                        sample_exist = check_sample(process_name, samples_sum_events)
-                        if sample_exist[0]:
-                            sample_sumEvents   = sample_exist[1]
+                fileList = sampleInfo[sampleFormat]
+                files = []
+                for iEntry in fileList:
+                    if "*" in iEntry:
+                        files.extend( glob.glob( iEntry ) )
+                    else:  files.append( iEntry )
+                sample_cossSection = sampleInfo["cross_section"] if (sample_category != kData) else None
+                sample_nEvents     = sampleInfo["nEvents"]
+                sample_exist = check_sample(process_name, samples_sum_events)
+                if sample_exist[0]:
+                    sample_sumEvents   = sample_exist[1]
+                else:
+                    sample_sumEvents   = sampleInfo["sumEvents"] if (sample_category != kData) else None
+                nSplits = int(len(files) / self.nFilesPerJob) if self.nFilesPerJob > 0 else 1
+                nSplits = 1 if nSplits==0 else nSplits
+                files_splitted = np.array_split(files, nSplits)
+                sampledir = os.path.join(self.DestinationDir, process_name)
+                for iJob in range(len(files_splitted)):
+                    #config = config_Template.deepcopy()
+                    config = copy.deepcopy(config_Template)
+                    config['lepton_selection'] = self.lepton_selection
+                    config['msoftdrop'] = self.msoftdrop
+                    # Job related files
+                    outputdir = os.path.join(sampledir, 'output')
+                    sOpRootFile_to_use = sOpRootFile.replace('$SAMPLE', f'{process_name}')
+                    sOpRootFile_to_use = sOpRootFile_to_use.replace('$STAGE', str(0))
+                    sOpRootFile_to_use = sOpRootFile_to_use.replace('$IJOB', str(iJob))
+                    self.init_condor_files(condor_ana, outputdir, sOpRootFile_to_use)
+                    jobStatusForJobSubmission  = [0, 3, 4, 5]
+                    jobStatus = condor_ana.check_jobstatus(printLevel >= 3)
+                    if jobStatus == 0:
+                        config["era"] = self.era
+                        config["inputFiles"] = list( files_splitted[iJob] )
+                        config["outputFile"] = condor_ana.sOpRootFile_to_use
+                        config["sampleCategory"] = sample_category
+                        config['process_name'] = process_name
+                        config["isMC"] = 1 if (sample_category != kData) else 0
+                        config["leptonselection"] = self.lepton_selection
+                        config["met"] = self.msoftdrop
+                        config["nEvents"] = sample_nEvents
+                        if (sample_category != kData):
+                            config["crossSection"] = sample_cossSection
+                            config["sumEvents"] = sample_sumEvents
+                            if self.applystitching:
+                                if sample_category == 'WJets' and 'WJetsToQQ' not in config['process_name']:
+                                    config['applystitching'] = True
                         else:
-                            sample_sumEvents   = sampleInfo["sumEvents"] if (sample_category != kData) else None
-                        nSplits = int(len(files) / self.nFilesPerJob) if self.nFilesPerJob > 0 else 1
-                        nSplits = 1 if nSplits==0 else nSplits
-                        files_splitted = np.array_split(files, nSplits)
-                        sampledir = os.path.join(self.DestinationDir, leptonselection, met, process_name)
-                        for iJob in range(len(files_splitted)):
-                            #config = config_Template.deepcopy()
-                            config = copy.deepcopy(config_Template)
-                            # Job related files
-                            outputdir = os.path.join(sampledir, 'output')
-                            sOpRootFile_to_use = sOpRootFile.replace('$SAMPLE', f'{process_name}_{leptonselection}_{met}')
-                            sOpRootFile_to_use = sOpRootFile_to_use.replace('$STAGE', str(0))
-                            sOpRootFile_to_use = sOpRootFile_to_use.replace('$IJOB', str(iJob))
-                            self.init_condor_files(condor_ana, outputdir, sOpRootFile_to_use)
-                            jobStatusForJobSubmission  = [0, 3, 4, 5]
-                            jobStatus = condor_ana.check_jobstatus(printLevel >= 3)
-                            if jobStatus == 0:
-                                config["era"] = self.era
-                                config["inputFiles"] = list( files_splitted[iJob] )
-                                config["outputFile"] = condor_ana.sOpRootFile_to_use
-                                config["sampleCategory"] = sample_category
-                                config['process_name'] = process_name
-                                config["isMC"] = 1 if (sample_category != kData) else 0
-                                config["leptonselection"] = leptonselection
-                                config["met"] = met
-                                config["nEvents"] = sample_nEvents
-                                if (sample_category != kData):
-                                    config["crossSection"] = sample_cossSection
-                                    config["sumEvents"] = sample_sumEvents
-                                    if self.applystitching:
-                                        if sample_category == 'WJets' and 'WJetsToQQ' not in config['process_name']:
-                                            config['applystitching'] = True
-                                else:
-                                    del config["crossSection"]
-                                    del config["sumEvents"]
-                                    if 'EGamma' in config['process_name']:
-                                        config['use_triggers_1mu'] = False
-                                        config['use_triggers_jet'] = False
-                                    elif 'SingleMuon' in config['process_name']:
-                                        config['use_triggers_1e'] = False
-                                        config['use_triggers_jet'] = False
-                                with open(condor_ana.sConfig_to_use, "w") as fConfig:
-                                    json.dump( config,  fConfig, indent=4)
-                                condor_ana.writeCondorExecFile()
-                            elif jobStatus in [1, 2]:
-                                # job is either running or succeeded
-                                continue
-                            increaseJobFlavour = False
-                            self.submitJob(condor_ana, jobStatus)
+                            del config["crossSection"]
+                            del config["sumEvents"]
+                            if 'EGamma' in config['process_name']:
+                                config['use_triggers_1mu'] = False
+                                config['use_triggers_jet'] = False
+                            elif 'SingleMuon' in config['process_name']:
+                                config['use_triggers_1e'] = False
+                                config['use_triggers_jet'] = False
+                        with open(condor_ana.sConfig_to_use, "w") as fConfig:
+                            json.dump( config,  fConfig, indent=4)
+                        condor_ana.writeCondorExecFile()
+                    elif jobStatus in [1, 2]:
+                        # job is either running or succeeded
+                        continue
+                    increaseJobFlavour = False
+                    self.submitJob(condor_ana, jobStatus)
             # write JobSubmission status report in JobSubLog file
             condor_ana.update_JobSubLog(iJobSubmission)
             if self.dryRun:
@@ -189,40 +199,40 @@ class analysis_wrapper():
         while iJobSubmission <= self.nResubmissionMax:
             print('\n\n%s \t Startiing iJobSubmission for hadd: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission)) 
             condor_hadd.initialize_list()
-            for leptonselection in ['Fake', 'Tight']:
-                for met in ['met_GE20', 'met_L20']:
+            #for leptonselection in ['Tight']:
+            #for met in ['met_GE20', 'met_L20']:
+            if stage == 1:
+                inputdirs = glob.glob(f'{self.DestinationDir}/*/output/')
+            else:
+                inputdirs = [os.path.join(self.DestinationDir)]
+                #if not len(glob.glob(f'{inputdirs}/*')): continue
+            for inputdir in inputdirs:
+                if stage == 1:
+                    process_name = inputdir.split('/')[-3]
+                    if 'SUSY' in process_name and leptonselection == 'Fake': continue
+                    if process_name == 'hadd': continue
+                    outputdir = inputdir
+                    sOpRootFile_to_use = f'hadd_{process_name}.root'
+                else:
+                    outputdir = os.path.join(inputdir, 'hadd', 'output')
+                    sOpRootFile_to_use = f'hadd_stage1.root'
+                self.init_condor_files(condor_hadd, outputdir, sOpRootFile_to_use)
+                jobStatus = condor_hadd.check_jobstatus(printLevel >= 3)
+                config = {}
+                if jobStatus == 0:
+                    config["inputdir"] = inputdir
+                    config["outputFile"] = os.path.join(outputdir, sOpRootFile_to_use)
                     if stage == 1:
-                        inputdirs = glob.glob(f'{self.DestinationDir}/{leptonselection}/{met}/*/output/')
+                        config['wildcard'] = 'ana'
                     else:
-                        inputdirs = [os.path.join(self.DestinationDir, leptonselection, met)]
-                        if not len(glob.glob(f'{inputdirs}/*')): continue
-                    for inputdir in inputdirs:
-                        if stage == 1:
-                            process_name = inputdir.split('/')[-3]
-                            if 'SUSY' in process_name and leptonselection == 'Fake': continue
-                            if process_name == 'hadd': continue
-                            outputdir = inputdir
-                            sOpRootFile_to_use = f'hadd_{process_name}_{leptonselection}_{met}.root'
-                        else:
-                            outputdir = os.path.join(inputdir, 'hadd', 'output')
-                            sOpRootFile_to_use = f'hadd_stage1_{leptonselection}_{met}.root'
-                        self.init_condor_files(condor_hadd, outputdir, sOpRootFile_to_use)
-                        jobStatus = condor_hadd.check_jobstatus(printLevel >= 3)
-                        config = {}
-                        if jobStatus == 0:
-                            config["inputdir"] = inputdir
-                            config["outputFile"] = os.path.join(outputdir, sOpRootFile_to_use)
-                            if stage == 1:
-                                config['wildcard'] = 'ana'
-                            else:
-                                config['wildcard'] = '*/output/hadd'
-                            with open(condor_hadd.sConfig_to_use, "w") as fConfig:
-                                json.dump( config,  fConfig, indent=4)
-                            condor_hadd.writeCondorExecFile(f'-p {config["inputdir"]} -o {config["outputFile"]} -w {config["wildcard"]}')
-                        elif jobStatus in [1, 2]:
-                            # job is either running or succeeded
-                            continue
-                        self.submitJob(condor_hadd, jobStatus)
+                        config['wildcard'] = '*/output/hadd'
+                    with open(condor_hadd.sConfig_to_use, "w") as fConfig:
+                        json.dump( config,  fConfig, indent=4)
+                        condor_hadd.writeCondorExecFile(f'-p {config["inputdir"]} -o {config["outputFile"]} -w {config["wildcard"]}')
+                elif jobStatus in [1, 2]:
+                    # job is either running or succeeded
+                    continue
+                self.submitJob(condor_hadd, jobStatus)
             # write JobSubmission status report in JobSubLog file
             condor_hadd.update_JobSubLog(iJobSubmission)
             if self.dryRun:
@@ -250,10 +260,10 @@ class analysis_wrapper():
         sCondorOutput_to_use = sOpRootFile_to_use.replace('.root', '_condor.out').replace(outputdir, condordir)
         sCondorError_to_use = sOpRootFile_to_use.replace('.root', '_condor.error').replace(outputdir, condordir)
         con.initialize_files(sOpRootFile_to_use, configdir,
-                                    sConfig_to_use, condordir, sCondorExec_to_use,
-                                    sCondorSubmit_to_use, sCondorLog_to_use, sCondorOutput_to_use,
-                                    sCondorError_to_use
-                                )
+            sConfig_to_use, condordir, sCondorExec_to_use,
+            sCondorSubmit_to_use, sCondorLog_to_use, sCondorOutput_to_use,
+            sCondorError_to_use
+        )
     def submitJob(self, con, jobStatus):
         increaseJobFlavour = False
         if jobStatus == [3, 5]:
@@ -272,6 +282,21 @@ class analysis_wrapper():
                 os.system(cmd1)
         else:
             pass
+    
+    def run_addBackgrounds(self):
+        
+        samples = [s for s in self.selSamplesToRun_list if ('SUSY' not in s and 'data_obs' not in s)]
+        samples = ' '.join(samples)
+        for leptonselection in ['Tight']:
+            for met in ['met_L20', 'met_GE20']:#, 'met_L20']:
+                ip = os.path.join(self.DestinationDir, leptonselection, met, 'hadd', 'output')
+                op = os.path.join(self.DestinationDir, leptonselection, met, 'addBackgrounds')
+                os.makedirs(op, exist_ok=True)
+                ifile = os.path.join(ip, f'hadd_stage1_{leptonselection}_{met}.root')
+                ofile = os.path.join(op, f'addBackground_{leptonselection}_{met}.root')
+                cmd = f'python3 addBackgrounds.py -p {ifile} -o {ofile} -s {samples} -syst topt_reweigingUp topt_reweigingDown'
+                print('cmd: ', cmd)
+                os.system(cmd)
 '''
 if 1:#do_hadd:
     if run_file == 'count_genweight':

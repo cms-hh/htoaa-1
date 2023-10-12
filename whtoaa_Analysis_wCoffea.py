@@ -1,5 +1,6 @@
 #https://cms.cern.ch/iCMS/analysisadmin/cadilines?line=HIG-18-026&tp=an&id=2158&ancode=HIG-18-026
 #htoaa analysis main code
+#/afs/cern.ch/work/s/snandan/anaconda3/envs/myEnv/lib/python3.10/site-packages/boost_histogram/_internal/hist.py
 
 import os
 import sys
@@ -14,9 +15,12 @@ from copy import deepcopy
 #import uproot
 import uproot3 as uproot
 from auxiliary import met_p4
-from auxiliary import top_pT_reweighting
+from auxiliary import selectRunLuminosityBlock
 from metfilter import apply_metfilters
 np.set_printoptions(threshold=sys.maxsize)
+import hist
+from histograms import histograms
+from weights import event_weights#calculate_weight, transfer_factor
 '''
 H->aa->4b boosted analysis macro
 
@@ -24,31 +28,12 @@ References:
   * Coffea framework used for TTGamma analysis: https://github.com/nsmith-/TTGamma_LongExercise/blob/FullAnalysis/ttgamma/processor.py
 * Coffea installation: /home/siddhesh/anaconda3/envs/ana_htoaa/lib/python3.10/site-packages/coffea
 '''
-
-pt = OD([
-    ('HT-0To70', [0, 70]),
-    ('HT-70To100', [70,100]),
-    ('HT-100To200', [100,200]),
-    ('HT-200To400', [200,400]),
-    ('HT-400To600', [400,600]),
-    ('HT-600To800', [600,800]),
-    ('HT-800To1200', [800, 1200]),
-    ('HT-1200To2500', [1200,2500]),
-    ('HT-2500ToInf', [2500]),
-])
-njet = OD([
-    ('0Jet', 0),
-    ('1Jet', 1),
-    ('2Jet', 2),
-    ('3Jet', 3),
-    ('4Jet', 4)
-])
 #import coffea.processor as processor
 from coffea import processor, util
 from coffea.nanoevents import schemas
 from coffea.nanoevents.methods import nanoaod, vector
 from coffea.analysis_tools import PackedSelection, Weights
-from coffea import hist
+#from coffea import hist
 import awkward as ak
 import uproot
 
@@ -57,10 +42,6 @@ from htoaa_Settings import *#bTagWPs
 from htoaa_CommonTools import GetDictFromJsonFile, calculate_lumiScale, setXRootDRedirector, xrdcpFile
 from objectselection import ObjectSelection
 from genparticle import genparticle
-
-stitchingfile = 'stitchinginfo.json'
-with open(stitchingfile) as fSamplesInfo:
-    stitchinginfo = json.load(fSamplesInfo)
 
 nEventToReadInBatch = 0.5*10**6 # 2500000 #  1000 # 2500000
 nEventsToAnalyze =  -1 #-1 # 1000 # 100000 # -1
@@ -73,92 +54,22 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         ak.behavior.update(nanoaod.behavior)
         self.config = datasetInfo
         self.objectSelector = ObjectSelection(era=self.config["era"])
-        dataset_axis    = hist.Cat("dataset", "Dataset")
-        systematic_axis = hist.Cat("systematic", "Systematic Uncertatinty")
 
-        cutFlow_axis  = hist.Bin("CutFlow",   r"Cuts",            21, -0.5, 20.5)
-        genweight_axis  = hist.Bin("genWeight",   r"genWeight",            201, -100.5, 100.5)
-        pt_axis       = hist.Bin("Pt",        r"$p_{T}$ [GeV]",   200, 0, 1000)
-        mass_axis     = hist.Bin("Mass",      r"$m$ [GeV]",       300, 0, 300)
-        mlScore_axis  = hist.Bin("MLScore",   r"ML score",        200, 0., 1.)
-        LHE_HT_axis   = hist.Bin("LHE_HT",   r"LHE_HT",        2500, 0., 3000.)
-        LHE_Njet_axis   = hist.Bin("LHE_Njet",   r"LHE_Njet",        5, -0.5, 4.5)
-        sXaxis      = 'xAxis'
-        sXaxisLabel = 'xAxisLabel'
-        sYaxis      = 'yAxis'
-        sYaxisLabel = 'yAxisLabel'
-        histos = OD([
-            ('hCutFlow',                                  {sXaxis: cutFlow_axis,    sXaxisLabel: 'Cuts'}),
-            ('hFatJetlen',                                {sXaxis: cutFlow_axis,    sXaxisLabel: 'len(FatJet)'}),
-            ('hLeadingFatJetPt',                          {sXaxis: pt_axis,         sXaxisLabel: r"$p_{T}(leading FatJet)$ [GeV]"}),
-            ('hLeadingFatJetMSoftDrop',                   {sXaxis: mass_axis,       sXaxisLabel: r"m_{soft drop} (leading FatJet) [GeV]"}),
-            ('hLeadingFatJetParticleNetMD_Xbb',           {sXaxis: mlScore_axis,    sXaxisLabel: r"LeadingFatJetParticleNetMD_Xbb"}),
-            ('hLeadingFatJetMass',                        {sXaxis: mass_axis,       sXaxisLabel: r"leading FatJet mass [GeV]"}),
-            ('hLeadingFatJetDeepTagMD_bbvsLight',         {sXaxis: mlScore_axis,    sXaxisLabel: r"LeadingFatJetDeepTagMD_bbvsLight"}),
-            ('LHE_HT_gen',                                {sXaxis: LHE_HT_axis,    sXaxisLabel: r"LHE_HT"}),
-            ('LHE_Njet_gen',                              {sXaxis: LHE_Njet_axis,    sXaxisLabel: r"LHE_Njet"}),
-            ('genweight',                                  {sXaxis: genweight_axis,    sXaxisLabel: 'genWeight'}),
-        ])
-        self._accumulator = processor.dict_accumulator({
-            'cutflow': processor.defaultdict_accumulator(int)
-        })
-
-        for histName, histAttributes in histos.items():
-            hXaxis = deepcopy(histAttributes[sXaxis])
-            hXaxis.label = histAttributes[sXaxisLabel]
-            if sYaxis not in histAttributes.keys():
-                # TH1
-                self._accumulator.add({
-                    histName: hist.Hist(
-                        histName,
-                        dataset_axis,
-                        hXaxis,
-                        systematic_axis,
-                    )
-                })
-            else:
-                # TH2
-                hYaxis = deepcopy(histAttributes[sYaxis])
-                hYaxis.label = histAttributes[sYaxisLabel]
-                
-                self._accumulator.add({
-                    histName: hist.Hist(
-                        "Counts",
-                        dataset_axis,
-                        hXaxis,
-                        hYaxis,
-                        systematic_axis,
-                    )
-                })
     @property
     def accumulator(self):
         return self._accumulator
 
     def process(self, events):
         dataset = events.metadata["dataset"] # dataset label
+        if not self.config['isMC']:
+            with open('Cert_314472-325175_13TeV_Legacy2018_Collisions18_JSON.txt') as f:
+                rl = json.load(f)
+            events = events[selectRunLuminosityBlock(rl, events.run, events.luminosityBlock)]
         events = apply_metfilters(self.config['isMC'], events)
-        if self.config['isMC']:
-            output = self.accumulator.identity()
-            systematics_shift = [None]
-            for _syst in systematics_shift:
-                output += self.process_shift(events, _syst)
-        else:
-            output = self.process_shift(events, None)
-
-        return output
-    
-    def process_shift(self, events, shift_syst=None):
-
-        output = self.accumulator.identity()
-        dataset = events.metadata["dataset"] # dataset label
-        ##################
-        # OBJECT SELECTION
-        ##################
-
-
         # Gen-level selection ---------------------------------------------------------------------
         genHiggs = None
         genHT    = None
+        
         if self.config['isSignal']:
             genHiggs  = self.objectSelector.selectGenHiggs(events)        
             genHT     = self.objectSelector.GenHT(events)
@@ -201,59 +112,26 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         # EVENT VARIABLES
         ##################
 
-        HLT_AK8PFJet330_name = "HLT_AK8PFJet330_TrimMass30_PFAK8BoostedDoubleB_np4" 
-        
-        # sel_names_all = dict of {"selection name" : [list of different cuts]}; for cut-flow table
-        sel_names_all = OD([
-            ("SR",                    [
-                "nPV",
-                "FatJet",
-                "lep",
-                "met"
-                ,'triggered'
-                , 'trigObj_matched_lep'
-                #"ak4Jet"
-            ]),
-        ])
-        if self.config['isMC'] == 0:
-            sel_names_all['SR'].append('dataset_check')
-        # reconstruction level cuts for cut-flow table. Order of cuts is IMPORTANT
-        selection = PackedSelection()
         FatJet = self.objectSelector.selectFatJets(events)
         ak4Jet = self.objectSelector.selectak4Jets(events)
         preselele = self.objectSelector.selectElectrons(events)
         preselmu = self.objectSelector.selectMuons(events)
-        fakeele = preselele[preselele.mvaTTH < 0.3]
-        fakemu = preselmu[preselmu.mvaTTH < 0.5]
+        elesize = ak.sum(ak.num(preselele))
+        musize = ak.sum(ak.num(preselmu))
         is_triggered_1ele = events.HLT.Ele32_WPTight_Gsf
         is_triggered_1mu = events.HLT.IsoMu24 | events.HLT.IsoMu27
         sel_triggered_1ele = (self.config['use_triggers_1e']) & is_triggered_1ele
         sel_triggered_1mu = (self.config['use_triggers_1mu']) & is_triggered_1mu
-        if self.config['leptonselection'] == 'Tight':
-            ele = preselele[preselele.mvaTTH >= 0.3]
-            mu = preselmu[preselmu.mvaTTH >= 0.5]
-        else:
-            ele = preselele[preselele.mvaTTH < 0.3]
-            mu = preselmu[preselmu.mvaTTH < 0.5]
-        lep = ak.with_name(
-                ak.concatenate([mu, ele], axis=1), "PtEtaPhiMCandidate"
-            )
-        lep = lep[ak.argsort(lep.pt, axis=-1, ascending=False)]
-        lep = lep[:, 0:1]
+        preselele = ak.with_field(preselele, (preselele.mvaTTH >=0.3), "tight_ele")
+        preselmu = ak.with_field(preselmu, (preselmu.mvaTTH >=0.5), "tight_mu")
+        preselele = ak.with_field(preselele, (preselele.mvaTTH <0.3), "fake_ele")
+        preselmu = ak.with_field(preselmu, (preselmu.mvaTTH <0.5), "fake_mu")
+
         #https://github.com/HEP-KBFI/cmssw/blob/master/PhysicsTools/NanoAOD/python/triggerObjects_cff.py#L94 
-        trig_obj_ele = (abs(events.TrigObj.id) == 11) & ((events.TrigObj.filterBits & 2)==2)
-        trig_obj_mu = (abs(events.TrigObj.id) == 13) & ((events.TrigObj.filterBits & 8)==8)
-        sel_ele = abs(lep.pdgId) == 11
-        sel_mu = abs(lep.pdgId) == 13
-        trigObj_matched_ele = ak.any(events.TrigObj[trig_obj_ele].metric_table(lep[sel_ele])<0.4, axis=-1)
-        trigObj_matched_mu = ak.any(events.TrigObj[trig_obj_mu].metric_table(lep[sel_mu])<0.4, axis=-1)
-        lep_et = np.sqrt(lep.mass * lep.mass + lep.px * lep.px + lep.py * lep.py)
-        m = met_p4(events)
-        #nu_et = np.sqrt(m.px * m.px + m.py*m.py)
-        mt_W = lep.mass * lep.mass +  2* (lep.pt*m.pt -(lep.px *m.px + lep.py * m.py))
-        # create a PackedSelection object
-        # this will help us later in composing the boolean selections easily
-        if self.config['isSignal']:
+        trig_obj_ele = (abs(events.TrigObj.id) == 11) & ( (events.TrigObj.filterBits & 2) == 2 )
+        trig_obj_mu = (abs(events.TrigObj.id) == 13) & ( (events.TrigObj.filterBits & 8) == 8 )
+
+        if 0:#self.config['isSignal']:
             sel_names_GEN = ["1GenHiggs", "2GenA", "2GenAToBBbarPairs", "dR_GenH_GenB_0p8"]
             FatJet = FatJet[(FatJet.delta_r(LVGenB_0) <0.8)
                             & (FatJet.delta_r(LVGenB_1) <0.8)
@@ -263,204 +141,227 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             selection.add("1GenHiggs", ak.num(genHiggs) == 1)
             selection.add("2GenA", ak.num(genACollection) == 2)
             selection.add("2GenAToBBbarPairs", ak.num(genBBar_pairs) == 2)
-        FatJet = FatJet[ak.all(FatJet.metric_table(lep)>0.8, axis=-1)]
-        if "nPV" in sel_names_all["SR"]:
-            selection.add("nPV", events.PV.npvsGood >= 1)
-        if "FatJet" in sel_names_all["SR"]:
-            selection.add(
-                "FatJet",
-                ak.num(FatJet, axis=1) >=1
-            )
-        if 'lep' in sel_names_all["SR"]:
-            selection.add("lep", ak.num(lep) == 1)
-        if 'met' in sel_names_all["SR"]:
-            selection.add("met", events.MET.pt >= 20 if "GE" in self.config["met"]\
-                          else events.MET.pt < 20)
-        if 'triggered' in sel_names_all["SR"]:
-            selection.add("triggered", sel_triggered_1ele | sel_triggered_1mu)
-        if 'dataset_check' in sel_names_all["SR"]:
-            selection.add("dataset_check", (sel_triggered_1ele & is_triggered_1mu)==0)
-        if 'ak4Jet' in sel_names_all["SR"]:
-            selection.add("ak4Jet", ak.num(ak4Jet) < 1)
-        if 'trigObj_matched_lep' in sel_names_all["SR"]:
-            selection.add("trigObj_matched_lep", (ak.any(trigObj_matched_ele, axis=-1) & (sel_triggered_1ele)) | (ak.any(trigObj_matched_mu, axis=-1) & sel_triggered_1mu ))
-        # useful debugger for selection efficiency
-        sel_SR           = selection.all(* sel_names_all["SR"])
-        ################
-        # EVENT WEIGHTS
-        ################
-        # create a processor Weights object, with the same length as the number of events in the chunk
-        weights     = Weights(len(events))
-        if self.config['isMC']:
-            weights_gen = Weights(len(events))
-            genweight_unique = set(events.genWeight)
-            count = {}
-            for gu in genweight_unique:
-                count[gu] = ak.sum(ak.where(events.genWeight==gu, 1,0))
-            count = sorted([(k,v) for k,v in count.items()], key=lambda kv: kv[1], reverse=True)
-            events.genWeight = ak.where(events.genWeight >3*count[0][0], 3*count[0][0], events.genWeight)
-            stitch = np.full(len(events), self.config["lumiScale"])
-            if self.config["applystitching"]:
-                for idx_pt, (k_pt,v_pt) in enumerate(pt.items()):
-                    pt_min = v_pt[0]
-                    if len(v_pt) > 1:
-                        pt_max = v_pt[1]
-                    else:
-                        pt_max = 10000000000
-                    for idx_njet, (k_njet,v_njet) in enumerate(njet.items()):
-                        njet_min = v_njet
-                        stitch = ak.where((events.LHE.HT>=pt_min)&(events.LHE.HT<pt_max)&(events.LHE.Njets==njet_min), 59.83*1000*stitchinginfo[k_pt][k_njet]['xs']/stitchinginfo[k_pt][k_njet]['nevent'] if stitchinginfo[k_pt][k_njet]['nevent'] else stitch, stitch)
+        FatJet = ak.with_field(FatJet, FatJet.msoftdrop >= 90, "msoftdrop_GE_90")
+        FatJet = ak.with_field(FatJet, FatJet.msoftdrop < 90, "msoftdrop_L_90")
 
-        if self.config["isMC"]:
-            if not self.config["applystitching"]:
-                weights.add(
-                    "lumiWeight",
-                    weight=np.full(len(events), self.config["lumiScale"])
-                )
-                weights_gen.add(
-                    "lumiWeight",
-                    weight=np.full(len(events), self.config["lumiScale"])
-                )
-            else:
-                weights.add(
-                    "lumiWeight",
-                    weight=stitch
-                )
-                weights_gen.add(
-                    "lumiWeight",
-                    weight=stitch
-                )
-            weights.add(
-                "genWeight",
-                weight=events.genWeight
+        evt_weights = event_weights(events, self.config)
+        weights = evt_weights.calculate_weight()
+
+        systList = ["central"]
+        '''if self.config['isMC']:
+        if dataset.startswith('TT'):
+        systList.extend(["topt_reweigingUp", "topt_reweigingDown"])'''
+
+        output = histograms(systList, self.config['msoftdrop'])
+
+        #for lepton in self.config['lepton_selection']:#['tight_lep', 'fake_lepton']:
+        if self.config['lepton_selection'] == 'tight_lep':
+            selele = preselele[preselele.tight_ele]
+            selmu = preselmu[preselmu.tight_mu]
+            sellep_all = ak.with_name(
+                ak.concatenate([selmu, selele], axis=1), "PtEtaPhiMCandidate"
             )
-            weights_gen.add(
-                "genWeight",
-                weight=events.genWeight
-            )
-            weights.add(
-                "btagWeight",
-                weight=(events.btagWeight.DeepCSVB)
-            )
-            if dataset.startswith('TT'):
-                topt_reweiging = ak.to_numpy(top_pT_reweighting(events.GenPart)).squeeze()
-                weights.add(
-                    "topt_reweiging",
-                    weight=topt_reweiging,
-                    weightUp=topt_reweiging**2,  # w**2
-                    weightDown=ak.ones_like(topt_reweiging)  # w = 1
-                )
-            
-        ###################
-        # FILL HISTOGRAMS
-        ###################
-        systList = []
-        if self.config['isMC']:
-            if shift_syst is None:
-                systList = [
-                    "central"
-                ]
-                if dataset.startswith('TT'):
-                   systList.extend(["topt_reweigingUp", "topt_reweigingDown"])
-            else:
-                systList = [shift_syst]
         else:
-            systList = ["noweight"]
-        #systList = ["noweight"]
-            
-        output['cutflow']['all events'] += len(events)
-        output['cutflow'][sWeighted+'all events'] += weights.weight().sum()
-        for iSelection in sel_names_all.keys():
-            iName = f"{iSelection}: {sel_names_all[iSelection]}"
-            sel_i = selection.all(* sel_names_all[iSelection])
-            output['cutflow'][iName] += sel_i.sum()
-            output['cutflow'][sWeighted+iName] +=  weights.weight()[sel_i].sum()
-        allcuts = sel_names_all["SR"]
-        for syst in systList:
-
-            # find the event weight to be used when filling the histograms
-            weightSyst = syst
-            weightSyst_gen = None
-            # in the case of 'central', or the jet energy systematics, no weight systematic variation is used (weightSyst=None)
-            if syst in ["central", "JERUp", "JERDown", "JESUp", "JESDown"]:
-                weightSyst = None
-
-            ones_list = np.ones(len(events))
-            
-            if syst == "noweight":
-                evtWeight = np.ones(len(events))
+            if 1:
+                sellep_all = preselele[preselele.fake_ele]
+                sellep_tight = preselele[preselele.tight_ele]
             else:
-                evtWeight     = weights.weight(weightSyst)
-                evtWeight_gen = weights_gen.weight(weightSyst_gen)
-            # all events
-            cuts = []
-            for ibin, cut in enumerate(allcuts):
-                cuts.append(cut)
-                n = selection.all(*cuts).sum()
-                n = np.ones(n)
-                output['hCutFlow'].fill(
-                    dataset=dataset,
-                    CutFlow=(n * ibin),
-                    systematic=syst
-                )
-            output['hLeadingFatJetPt'].fill(
-                dataset=dataset,
-                Pt=(ak.flatten(FatJet.pt[sel_SR][:, 0:1])),
-                systematic=syst,
-                weight=evtWeight[sel_SR]
-            )
-            if self.config['isMC'] == 1:
-                output['LHE_HT_gen'].fill(
-                    dataset=dataset,
-                    LHE_HT=(events.LHE.HT),
-                    systematic=syst,
-                    weight=evtWeight_gen
-                )
-                output['LHE_Njet_gen'].fill(
-                    dataset=dataset,
-                    LHE_Njet=(events.LHE.Njets),
-                    systematic=syst,
-                    weight=evtWeight_gen
-                )
-                output['genweight'].fill(
-                    dataset=dataset,
-                    genWeight=(events.genWeight),
-                    systematic=syst
-                )
-            output['hLeadingFatJetMSoftDrop'].fill(
-                dataset=dataset,
-                Mass=(ak.flatten(FatJet.msoftdrop[sel_SR][:, 0:1])),
-                systematic=syst,
-                weight=evtWeight[sel_SR]
-            )
-            output['hFatJetlen'].fill(
-                dataset=dataset,
-                CutFlow=(ak.num(FatJet[sel_SR])),
-                systematic=syst,
-                weight=evtWeight[sel_SR]
-            )
-            fatjet_sortedpnmd = FatJet[ak.argsort(FatJet.particleNetMD_Xbb, ascending=False)]
-            output['hLeadingFatJetParticleNetMD_Xbb'].fill(
-                dataset=dataset,
-                MLScore=(ak.flatten(fatjet_sortedpnmd.particleNetMD_Xbb[sel_SR][:, 0:1])), 
-                systematic=syst,
-                weight=evtWeight[sel_SR]
-            )
-            fatjet_sortedbbvs = FatJet[ak.argsort(FatJet.deepTagMD_bbvsLight, ascending=False)]
-            output['hLeadingFatJetDeepTagMD_bbvsLight'].fill(
-                dataset=dataset,
-                MLScore=(ak.flatten(fatjet_sortedbbvs.deepTagMD_bbvsLight[sel_SR][:, 0:1])),
-                systematic=syst,
-                weight=evtWeight[sel_SR]
-            )
-            output['hLeadingFatJetMass'].fill(
-                dataset=dataset,
-                Mass=(ak.flatten(fatjet_sortedbbvs.mass[sel_SR][:, 0:1])),
-                systematic=syst,
-                weight=evtWeight[sel_SR]
-            )
-        return output
+                sellep_all = preselmu[preselmu.fake_mu]
+                sellep_tight = preselmu[preselmu.tight_mu]
+        sellep_all = sellep_all[ak.argsort(sellep_all.pt, axis=-1, ascending=False)]
+        sellep = sellep_all[abs(sellep_all.pdgId)==11][:,0:1]
+        sel_ele = abs(sellep.pdgId) == 11
+        sel_mu = abs(sellep.pdgId) == 13
+        trigObj_matched_ele = ak.any(events.TrigObj[trig_obj_ele].metric_table(sellep[sel_ele]) < 0.4, axis=-1)
+        trigObj_matched_mu = ak.any(events.TrigObj[trig_obj_mu].metric_table(sellep[sel_mu]) < 0.4, axis=-1)
+        for msoftdrop in self.config['msoftdrop']:#['msoftdrop_GE_90', 'msoftdrop_L_90']:
+            if msoftdrop == 'msoftdrop_GE_90':
+                selFatJet = FatJet[(FatJet.msoftdrop > 90)
+                    & (ak.all(FatJet.metric_table(sellep)>0.8, axis=-1))
+                ]
+            else:
+                assert(msoftdrop == 'msoftdrop_L_90')
+                selFatJet = FatJet[(FatJet.msoftdrop < 90)
+                    & (ak.all(FatJet.metric_table(sellep)>0.8, axis=-1))
+                ]
 
+            ak4jet = ak4Jet[ak.all(ak4Jet.metric_table(sellep)>0.4, axis=-1)]
+            ak4jet = ak4Jet[ak.all(ak4Jet.metric_table(selFatJet[:,0:1])>0.8, axis=-1)]
+            ht = ak.sum(ak4jet.pt, axis=1)
+            
+            selection = PackedSelection()
+            selection.add("nPV", events.PV.npvsGood >= 1)
+            if msoftdrop == 'msoftdrop_GE_90':
+                selection.add(msoftdrop, ak.num(selFatJet) > 0)
+            else:
+                selection.add(msoftdrop, (ak.num(selFatJet) > 0)\
+                  & (ak.num(FatJet[FatJet.msoftdrop > 90]) == 0))
+            if self.config['lepton_selection'] == 'tight_lep':
+                selection.add( self.config['lepton_selection'], ak.num(sellep_all) == 1 )
+            else:
+                selection.add( self.config['lepton_selection'], (ak.num(sellep_all) > 0)\
+                    & (ak.num(sellep_tight) == 0)\
+                )
+            selection.add("met", events.MET.pt >= 30)
+            selection.add("triggered", sel_triggered_1ele | sel_triggered_1mu)
+            selection.add("trigObj_matched_lep",\
+                    (ak.any(trigObj_matched_ele, axis=-1) & (sel_triggered_1ele))\
+                    | (ak.any(trigObj_matched_mu, axis=-1) & sel_triggered_1mu ))
+            if not self.config['isMC']:
+                selection.add("dataset_check", (sel_triggered_1ele & is_triggered_1mu)==0)
+            f0 = np.ones(len(events))
+            if not self.config['isSignal']\
+               and self.config['lepton_selection'] == 'tight_lep'\
+               and msoftdrop == 'msoftdrop_L_90'\
+               and len(events):
+                f0 = evt_weights.transfer_factor(ht, f0)
+
+            allcuts = selection.names#commoncuts + [lepton] + [msoftdrop]
+            sel_reg = selection.all(*allcuts)
+            ###################
+            # FILL HISTOGRAMS
+            ###################
+            output['cutflow'] = {}
+            output['cutflow']['all events'] = len(events)
+            output['cutflow'][sWeighted+'all events'] = weights.weight().sum()
+            for iSelection in allcuts:
+                iName = f'iSelection: {iSelection}'
+                sel_i = selection.all(*[iSelection])
+                output['cutflow'][iName] = sel_i.sum()
+                output['cutflow'][sWeighted+iName] =  weights.weight()[sel_i].sum()
+            for syst in systList:
+                weightSyst = syst
+                if syst in ["central", "JERUp", "JERDown", "JESUp", "JESDown"]:
+                    weightSyst = None
+                if not self.config['isMC']:
+                    evtWeight = f0 if self.config['lepton_selection'] == 'tight_lep'\
+                                and msoftdrop == 'msoftdrop_L_90'\
+                                else np.ones(len(events))
+                else:
+                    if self.config['lepton_selection'] == 'tight_lep'\
+                       and msoftdrop == 'msoftdrop_L_90':
+                        evtWeight = weights.weight(weightSyst)*f0
+                    else:
+                        evtWeight = weights.weight(weightSyst)
+                    evtWeight_gen = weights.partial_weight(['lumiWeight', 'genWeight'])
+                    
+                cuts = []
+                if syst == 'central':
+                    for ibin, cut in enumerate(allcuts):
+                        cuts.append(cut)
+                        n = selection.all(*cuts).sum()
+                        print('cut: ', cut, '\t', n)
+                        n = np.ones(n)
+                        output['hCutFlow'].fill(
+                            jet=msoftdrop,
+                            cutflow = (n*ibin),
+                            systematic='central'
+                        )
+                output['hLeadingFatJetPt'].fill(
+                    jet=msoftdrop,
+                    hLeadingFatJetPt=(ak.flatten(selFatJet.pt[sel_reg][:, 0:1])),
+                    systematic=syst,
+                    weight=evtWeight[sel_reg]
+                )
+                output['hLeadingFatJetMSoftDrop'].fill(
+                    jet=msoftdrop,
+                    hLeadingFatJetMSoftDrop=(ak.flatten(selFatJet.msoftdrop[sel_reg][:, 0:1])),
+                    systematic=syst,
+                    weight=evtWeight[sel_reg]
+                )
+                output['HT'].fill(
+                    jet=msoftdrop,
+                    HT=ht[sel_reg],
+                    systematic=syst,
+                    weight=evtWeight[sel_reg]
+                )
+                if self.config['isMC'] and syst == 'central' and 'LHE' in events.fields:
+                    output['LHE_HT_gen'].fill(
+                        jet=msoftdrop,
+                        LHE_HT_gen=(events.LHE.HT),
+                        systematic=syst,
+                        weight=evtWeight_gen
+                    )
+                    output['LHE_Njet_gen'].fill(
+                        jet=msoftdrop,
+                        LHE_Njet_gen=(events.LHE.Njets),
+                        systematic=syst,
+                        weight=evtWeight_gen
+                    )
+                    output['genweight'].fill(
+                        jet=msoftdrop,
+                        genWeight=(events.genWeight),
+                        systematic=syst
+                    )
+                if syst == 'central':
+                    cut_womet = ['nPV', msoftdrop]#, 'triggered']
+                    ele = events.Electron[events.Electron.mvaTTH > -0.6]
+                    mu = events.Muon[events.Muon.mvaTTH > -0.6]
+                    mva_lep = ak.with_name(ak.concatenate([ele,mu], axis=1), "PtEtaPhiMCandidate")
+                    mva_lep = mva_lep[ak.argsort(mva_lep.pt, ascending=False)][:,0:1]
+                    output['hmet'].fill(
+                        jet=msoftdrop,
+                        met=events.MET.pt[selection.all(*cut_womet)],
+                        systematic=syst,
+                        weight=evtWeight[selection.all(*cut_womet)]
+                    )
+                    selection_nocut = PackedSelection()
+                    selection_nocut.add("lep", ak.num(mva_lep) >= 1)
+                    selection_nocut.add("fatjet", ak.num(events.FatJet) >= 1)
+                    output['hmet_vs_lepmva'].fill(
+                        jet=msoftdrop,
+                        met=events.MET.pt[selection_nocut.all(*["lep"])],
+                        lepmva=(ak.flatten(mva_lep.mvaTTH[selection_nocut.all(*["lep"])])),
+                        systematic=syst,
+                        weight=evtWeight[selection_nocut.all(*['lep'])]
+                    )
+                    output['hmet_vs_lepiso'].fill(
+                        jet=msoftdrop,
+                        met=events.MET.pt[selection_nocut.all(*["lep"])],
+                        lepiso=(ak.flatten(mva_lep.miniPFRelIso_all[selection_nocut.all(*["lep"])])),
+                        systematic=syst,
+                        weight=evtWeight[selection_nocut.all(*['lep'])]
+                    )
+                    output['hsoftdrop_vs_lepiso'].fill(
+                        jet=msoftdrop,
+                        softdrop=(ak.flatten(events.FatJet[:,0:1].msoftdrop[selection_nocut.all(*["lep", 'fatjet'])])),
+                        lepiso=(ak.flatten(mva_lep.miniPFRelIso_all[selection_nocut.all(*["lep",'fatjet'])])),
+                        systematic=syst,
+                        weight=evtWeight[selection_nocut.all(*['lep','fatjet'])]
+                    )
+                    output['hsoftdrop_vs_lepmva'].fill(
+                        jet=msoftdrop,
+                        softdrop=(ak.flatten(events.FatJet[:,0:1].msoftdrop[selection_nocut.all(*["lep", 'fatjet'])])),
+                        lepmva=(ak.flatten(mva_lep.mvaTTH[selection_nocut.all(*["lep",'fatjet'])])),
+                        systematic=syst,
+                        weight=evtWeight[selection_nocut.all(*['lep','fatjet'])]
+                    )
+                    output['leptonsize'].fill(
+                        jet=msoftdrop,
+                        leptonsize=(np.concatenate((np.ones(elesize), np.ones(musize)*2))),
+                        systematic=syst
+                    )
+                fatjet_sortedpnmd = FatJet[ak.argsort(FatJet.particleNetMD_Xbb, ascending=False)]
+                output['hLeadingFatJetParticleNetMD_Xbb'].fill(
+                    jet=msoftdrop,
+                    hLeadingFatJetParticleNetMD_Xbb=(ak.flatten(fatjet_sortedpnmd.particleNetMD_Xbb[sel_reg][:, 0:1])), 
+                    systematic=syst,
+                    weight=evtWeight[sel_reg]
+                )
+                fatjet_sortedbbvs = FatJet[ak.argsort(FatJet.deepTagMD_bbvsLight, ascending=False)]
+                output['hLeadingFatJetDeepTagMD_bbvsLight'].fill(
+                    jet=msoftdrop,
+                    hLeadingFatJetDeepTagMD_bbvsLight=(ak.flatten(fatjet_sortedbbvs.deepTagMD_bbvsLight[sel_reg][:, 0:1])),
+                    systematic=syst,
+                    weight=evtWeight[sel_reg]
+                )
+                output['hLeadingFatJetMass'].fill(
+                    jet=msoftdrop,
+                    hLeadingFatJetMass=(ak.flatten(fatjet_sortedbbvs.mass[sel_reg][:, 0:1])),
+                    systematic=syst,
+                    weight=evtWeight[sel_reg]
+                )
+        return output
 
     def postprocess(self, accumulator):
         #pass
@@ -521,7 +422,6 @@ if __name__ == '__main__':
         chunksize=chunksize,  #3 ** 20,  ## Governs the number of times LeptonJetProcessor "process" is called
         maxchunks=maxchunks
     )
-
     output, metrics = run(
         fileset={sample_category: sInputFiles},
         treename="Events",
@@ -529,33 +429,29 @@ if __name__ == '__main__':
             datasetInfo=config
         )
     )
-
-    print(f"metrics: {metrics}")
-    
     if 'cutflow' in output.keys():
         print("Cutflow::")
         for key in output['cutflow'].keys():
             if key.startswith(sWeighted): continue
             print("%10f\t%10d\t%s" % (output['cutflow'][sWeighted+key], output['cutflow'][key], key))
-    
     if sOutputFile is not None:
         if not sOutputFile.endswith('.root'): sOutputFile += '.root'
-        sDir1 = 'evt/%s' % (sample_category)
+        sDir1 = f'evt/{config["lepton_selection"]}'# % (sample_category)
         with uproot.recreate(sOutputFile) as fOut:
             for key, value in output.items():
                 if not isinstance(value, hist.Hist): continue
-                for _dataset in value.axis('dataset').identifiers():
-                    for _syst in value.axis('systematic').identifiers():
-                        h1 = value.integrate('dataset',_dataset).integrate('systematic',_syst).to_hist()
-                        if 'central' not in _syst.name:
-                            histname = f'{key}_{_syst}'
+                for jet in range(0, len(value.axes[0])):
+                    jetname = value.axes[0][jet]
+                    for syst in  range(0, len(value.axes[1])):
+                        systname = value.axes[1][syst]
+                        histname = key + '_' + systname if 'central' not in systname else key
+                        if 'gen' not in histname:
+                            if value.ndim == 3:
+                                fOut[f'{sDir1}/{jetname}/{sample_category}/{histname}'] = value[jet,syst,:]
+                            else:
+                                fOut[f'{sDir1}/{jetname}/{sample_category}/{histname}'] = value[jet,syst,:,:]
                         else:
-                            histname = key
-                        if 'gen' not in value.label:
-                            fOut[f'{sDir1}/{histname}'] = h1
-                        else:
-                            if 'central' not in _syst.name: continue
-                            fOut[f'{sDir1}/gen/{histname}'] = h1
+                            fOut[f'{sDir1}/{jetname}/{sample_category}/gen/{histname}'] = value[jet,syst,:]
     current_memory, peak_memory = tracemalloc.get_traced_memory() # https://medium.com/survata-engineering-blog/monitoring-memory-usage-of-a-running-python-program-49f027e3d1ba
     print(f"\n\nMemory usage:: current {current_memory / 10**6}MB;  peak {peak_memory / 10**6}MB")
 
@@ -565,6 +461,6 @@ if __name__ == '__main__':
     totalTime_min = totalTime - float(totalTime_hr * 60)
     totalTime_min = int(totalTime_min/60)
     totalTime_sec = totalTime - float(totalTime_hr * 60*60) - float(totalTime_min * 60)
-    for f in sInputFiles:
-        os.system(f'rm {f}')
+    #for f in sInputFiles:
+    #os.system(f'rm {f}')
     print(f"Total run time: {totalTime_hr}h {totalTime_min}m {totalTime_sec}s = {totalTime}sec ")
