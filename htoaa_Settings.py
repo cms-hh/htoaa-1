@@ -1,4 +1,3 @@
-
 from collections import OrderedDict as OD
 
 # https://twiki.cern.ch/twiki/bin/view/CMSPublic/WorkBookXrootdService
@@ -64,8 +63,6 @@ GENPART_STATUSFLAGS = [
     "isLastCopyBeforeFSR",
 ]
 
-
-
 config_Template = OD([
     ("nEventsToAnalyze", -1),
     ("era", ''),
@@ -73,7 +70,6 @@ config_Template = OD([
     ("outputFile", ''),
     ("sampleCategory", ''),
     ("isMC", 0),
-    #("Luminosity", 0),
     ("crossSection", 0),
     ("nEvents", -1),
     ("sumEvents", -1),
