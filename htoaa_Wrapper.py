@@ -209,7 +209,7 @@ class analysis_wrapper():
             for inputdir in inputdirs:
                 if stage == 1:
                     process_name = inputdir.split('/')[-3]
-                    if 'SUSY' in process_name and leptonselection == 'Fake': continue
+                    #if 'SUSY' in process_name and leptonselection == 'Fake': continue
                     if process_name == 'hadd': continue
                     outputdir = inputdir
                     sOpRootFile_to_use = f'hadd_{process_name}.root'
