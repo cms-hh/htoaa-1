@@ -19,7 +19,7 @@ from auxiliary import selectRunLuminosityBlock
 from metfilter import apply_metfilters
 np.set_printoptions(threshold=sys.maxsize)
 import hist
-from histograms import histograms
+from histograms import histograms, clip_value
 from weights import event_weights#calculate_weight, transfer_factor
 '''
 H->aa->4b boosted analysis macro
@@ -131,19 +131,18 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         trig_obj_ele = (abs(events.TrigObj.id) == 11) & ( (events.TrigObj.filterBits & 2) == 2 )
         trig_obj_mu = (abs(events.TrigObj.id) == 13) & ( (events.TrigObj.filterBits & 8) == 8 )
 
-        if 0:#self.config['isSignal']:
+        if self.config['isSignal']:
             sel_names_GEN = ["1GenHiggs", "2GenA", "2GenAToBBbarPairs", "dR_GenH_GenB_0p8"]
             FatJet = FatJet[(FatJet.delta_r(LVGenB_0) <0.8)
                             & (FatJet.delta_r(LVGenB_1) <0.8)
                             & (FatJet.delta_r(LVGenBbar_0) < 0.8)
                             & (FatJet.delta_r(LVGenBbar_1) < 0.8)
             ]
-            selection.add("1GenHiggs", ak.num(genHiggs) == 1)
+            '''selection.add("1GenHiggs", ak.num(genHiggs) == 1)
             selection.add("2GenA", ak.num(genACollection) == 2)
-            selection.add("2GenAToBBbarPairs", ak.num(genBBar_pairs) == 2)
+            selection.add("2GenAToBBbarPairs", ak.num(genBBar_pairs) == 2)'''
         FatJet = ak.with_field(FatJet, FatJet.msoftdrop >= 90, "msoftdrop_GE_90")
         FatJet = ak.with_field(FatJet, FatJet.msoftdrop < 90, "msoftdrop_L_90")
-
         evt_weights = event_weights(events, self.config)
         weights = evt_weights.calculate_weight()
 
@@ -153,7 +152,8 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         systList.extend(["topt_reweigingUp", "topt_reweigingDown"])'''
 
         output = histograms(systList, self.config['msoftdrop'])
-
+        output['cutflow'] = {}
+        output['cutflow_weighted'] = {}
         #for lepton in self.config['lepton_selection']:#['tight_lep', 'fake_lepton']:
         if self.config['lepton_selection'] == 'tight_lep':
             selele = preselele[preselele.tight_ele]
@@ -169,7 +169,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 sellep_all = preselmu[preselmu.fake_mu]
                 sellep_tight = preselmu[preselmu.tight_mu]
         sellep_all = sellep_all[ak.argsort(sellep_all.pt, axis=-1, ascending=False)]
-        sellep = sellep_all[abs(sellep_all.pdgId)==11][:,0:1]
+        sellep = sellep_all[:,0:1]
         sel_ele = abs(sellep.pdgId) == 11
         sel_mu = abs(sellep.pdgId) == 13
         trigObj_matched_ele = ak.any(events.TrigObj[trig_obj_ele].metric_table(sellep[sel_ele]) < 0.4, axis=-1)
@@ -177,36 +177,43 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         for msoftdrop in self.config['msoftdrop']:#['msoftdrop_GE_90', 'msoftdrop_L_90']:
             if msoftdrop == 'msoftdrop_GE_90':
                 selFatJet = FatJet[(FatJet.msoftdrop > 90)
-                    & (ak.all(FatJet.metric_table(sellep)>0.8, axis=-1))
+                & (ak.all(FatJet.metric_table(sellep)>0.8, axis=-1))
                 ]
             else:
                 assert(msoftdrop == 'msoftdrop_L_90')
                 selFatJet = FatJet[(FatJet.msoftdrop < 90)
                     & (ak.all(FatJet.metric_table(sellep)>0.8, axis=-1))
                 ]
-
-            ak4jet = ak4Jet[ak.all(ak4Jet.metric_table(sellep)>0.4, axis=-1)]
-            ak4jet = ak4Jet[ak.all(ak4Jet.metric_table(selFatJet[:,0:1])>0.8, axis=-1)]
-            ht = ak.sum(ak4jet.pt, axis=1)
+            ak4jet_cleaned_wrt_lepton = ak4Jet[ak.all(ak4Jet.metric_table(sellep)>0.4, axis=-1)]
+            ak4jet_cleaned = ak4jet_cleaned_wrt_lepton[
+                ak.all(ak4jet_cleaned_wrt_lepton.metric_table(selFatJet[:,0:1])>0.8, axis=-1)
+            ]
+            nbtag_medium = ak.num(ak4jet_cleaned[ak4jet_cleaned.btagDeepFlavB > 0.2770])
+            ak4jet_notcleaned = ak4Jet[
+                ak.all(ak4Jet.metric_table(selFatJet[:,0:1])<=0.8, axis=-1)
+            ]
+            nbtag_notcleaned_medium = ak.num(ak4jet_notcleaned[ak4jet_notcleaned.btagDeepFlavB > 0.2770])
+            ht = ak.sum(ak4jet_cleaned.pt, axis=1)
             
             selection = PackedSelection()
             selection.add("nPV", events.PV.npvsGood >= 1)
+            if self.config['lepton_selection'] == 'tight_lep':
+                selection.add( self.config['lepton_selection'], (ak.num(sellep_all) == 1) & (ak.num(sellep) == 1))
+            else:
+                selection.add( self.config['lepton_selection'], (ak.num(sellep_all) > 0)\
+                    & (ak.num(sellep_tight) == 0)\
+                )
+            selection.add('nbtag_medium==0', nbtag_medium == 0)
             if msoftdrop == 'msoftdrop_GE_90':
                 selection.add(msoftdrop, ak.num(selFatJet) > 0)
             else:
                 selection.add(msoftdrop, (ak.num(selFatJet) > 0)\
                   & (ak.num(FatJet[FatJet.msoftdrop > 90]) == 0))
-            if self.config['lepton_selection'] == 'tight_lep':
-                selection.add( self.config['lepton_selection'], ak.num(sellep_all) == 1 )
-            else:
-                selection.add( self.config['lepton_selection'], (ak.num(sellep_all) > 0)\
-                    & (ak.num(sellep_tight) == 0)\
-                )
             selection.add("met", events.MET.pt >= 30)
             selection.add("triggered", sel_triggered_1ele | sel_triggered_1mu)
             selection.add("trigObj_matched_lep",\
-                    (ak.any(trigObj_matched_ele, axis=-1) & (sel_triggered_1ele))\
-                    | (ak.any(trigObj_matched_mu, axis=-1) & sel_triggered_1mu ))
+               (ak.any(trigObj_matched_ele, axis=-1) & (sel_triggered_1ele))\
+                | (ak.any(trigObj_matched_mu, axis=-1) & sel_triggered_1mu ))
             if not self.config['isMC']:
                 selection.add("dataset_check", (sel_triggered_1ele & is_triggered_1mu)==0)
             f0 = np.ones(len(events))
@@ -221,14 +228,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             ###################
             # FILL HISTOGRAMS
             ###################
-            output['cutflow'] = {}
-            output['cutflow']['all events'] = len(events)
-            output['cutflow'][sWeighted+'all events'] = weights.weight().sum()
-            for iSelection in allcuts:
-                iName = f'iSelection: {iSelection}'
-                sel_i = selection.all(*[iSelection])
-                output['cutflow'][iName] = sel_i.sum()
-                output['cutflow'][sWeighted+iName] =  weights.weight()[sel_i].sum()
             for syst in systList:
                 weightSyst = syst
                 if syst in ["central", "JERUp", "JERDown", "JESUp", "JESDown"]:
@@ -250,35 +249,57 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                     for ibin, cut in enumerate(allcuts):
                         cuts.append(cut)
                         n = selection.all(*cuts).sum()
+                        if msoftdrop not in output['cutflow'].keys():
+                            output['cutflow'][msoftdrop] = {}
+                            output['cutflow_weighted'][msoftdrop] = {}
+                        output['cutflow'][msoftdrop][cut] = n
+                        output['cutflow_weighted'][msoftdrop][cut] = np.sum(evtWeight[selection.all(*cuts)])
                         print('cut: ', cut, '\t', n)
                         n = np.ones(n)
                         output['hCutFlow'].fill(
                             jet=msoftdrop,
                             cutflow = (n*ibin),
-                            systematic='central'
+                            systematic='central',
+                            weight=evtWeight[selection.all(*cuts)]
                         )
                 output['hLeadingFatJetPt'].fill(
                     jet=msoftdrop,
-                    hLeadingFatJetPt=(ak.flatten(selFatJet.pt[sel_reg][:, 0:1])),
+                    hLeadingFatJetPt=clip_value(
+                        ak.flatten(selFatJet.pt[sel_reg][:, 0:1]),
+                        min(output['hLeadingFatJetPt'].axes[2].edges),
+                        max(output['hLeadingFatJetPt'].axes[2].edges)
+                    ),
                     systematic=syst,
                     weight=evtWeight[sel_reg]
                 )
                 output['hLeadingFatJetMSoftDrop'].fill(
                     jet=msoftdrop,
-                    hLeadingFatJetMSoftDrop=(ak.flatten(selFatJet.msoftdrop[sel_reg][:, 0:1])),
+                    hLeadingFatJetMSoftDrop=clip_value(
+                        ak.flatten(selFatJet.msoftdrop[sel_reg][:, 0:1]),
+                        min(output['hLeadingFatJetMSoftDrop'].axes[2].edges),
+                        max(output['hLeadingFatJetMSoftDrop'].axes[2].edges)
+                        ),
                     systematic=syst,
                     weight=evtWeight[sel_reg]
                 )
                 output['HT'].fill(
                     jet=msoftdrop,
-                    HT=ht[sel_reg],
+                    HT=clip_value(
+                        ht[sel_reg],
+                        min(output['HT'].axes[2].edges),
+                        max(output['HT'].axes[2].edges)
+                    ),
                     systematic=syst,
                     weight=evtWeight[sel_reg]
                 )
                 if self.config['isMC'] and syst == 'central' and 'LHE' in events.fields:
                     output['LHE_HT_gen'].fill(
                         jet=msoftdrop,
-                        LHE_HT_gen=(events.LHE.HT),
+                        LHE_HT_gen=clip_value(
+                            events.LHE.HT,
+                            min(output['LHE_HT_gen'].axes[2].edges),
+                            max(output['LHE_HT_gen'].axes[2].edges)
+                        ),
                         systematic=syst,
                         weight=evtWeight_gen
                     )
@@ -293,15 +314,26 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                         genWeight=(events.genWeight),
                         systematic=syst
                     )
+                fatjet_sortedpnmd = selFatJet[ak.argsort(selFatJet.particleNetMD_Xbb, ascending=False)][:,0:1]
+                deltar = fatjet_sortedpnmd.subjets[:,:,0:1].delta_r(fatjet_sortedpnmd.subjets[:,:,1:2])
+                output['hLeadingFatJetParticleNetMD_Xbb'].fill(
+                    jet=msoftdrop,
+                    hLeadingFatJetParticleNetMD_Xbb=(ak.flatten(fatjet_sortedpnmd.particleNetMD_Xbb[sel_reg][:, 0:1])),
+                    systematic=syst,
+                    weight=evtWeight[sel_reg]
+                )
                 if syst == 'central':
                     cut_womet = ['nPV', msoftdrop]#, 'triggered']
-                    ele = events.Electron[events.Electron.mvaTTH > -0.6]
-                    mu = events.Muon[events.Muon.mvaTTH > -0.6]
+                    ele = events.Electron#[events.Electron.mvaTTH > -0.6]
+                    mu = events.Muon#[events.Muon.mvaTTH > -0.6]
                     mva_lep = ak.with_name(ak.concatenate([ele,mu], axis=1), "PtEtaPhiMCandidate")
                     mva_lep = mva_lep[ak.argsort(mva_lep.pt, ascending=False)][:,0:1]
                     output['hmet'].fill(
                         jet=msoftdrop,
-                        met=events.MET.pt[selection.all(*cut_womet)],
+                        met=np.minimum(
+                            events.MET.pt[selection.all(*cut_womet)],
+                            max(output['hmet'].axes[2].edges)-1
+                        ),
                         systematic=syst,
                         weight=evtWeight[selection.all(*cut_womet)]
                     )
@@ -341,13 +373,116 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                         leptonsize=(np.concatenate((np.ones(elesize), np.ones(musize)*2))),
                         systematic=syst
                     )
-                fatjet_sortedpnmd = FatJet[ak.argsort(FatJet.particleNetMD_Xbb, ascending=False)]
-                output['hLeadingFatJetParticleNetMD_Xbb'].fill(
-                    jet=msoftdrop,
-                    hLeadingFatJetParticleNetMD_Xbb=(ak.flatten(fatjet_sortedpnmd.particleNetMD_Xbb[sel_reg][:, 0:1])), 
-                    systematic=syst,
-                    weight=evtWeight[sel_reg]
-                )
+                    output['ak4jetsize'].fill(
+                        jet=msoftdrop,
+                        ak4jetsize=(ak.num(ak4jet_cleaned)[sel_reg]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['ak4jetsize_notcleaned'].fill(
+                        jet=msoftdrop,
+                        ak4jetsize_notcleaned=(np.minimum(
+                            ak.num(ak4jet_notcleaned)[sel_reg],
+                            max(output['ak4jetsize_notcleaned'].axes[2].edges)-1
+                        )
+                    ),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['ak4jetsize_mediumbtag'].fill(
+                        jet=msoftdrop,
+                        ak4jetsize_mediumbtag=(nbtag_medium[sel_reg]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['ak4jetsize_notcleaned_mediumbtag'].fill(
+                        jet=msoftdrop,
+                        ak4jetsize_notcleaned_mediumbtag=(nbtag_notcleaned_medium[sel_reg]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['tau1'].fill(
+                        jet=msoftdrop,
+                        tau1=ak.flatten(fatjet_sortedpnmd.tau1[sel_reg][:,0:1]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['tau2'].fill(
+                        jet=msoftdrop,
+                        tau2=ak.flatten(fatjet_sortedpnmd.tau2[sel_reg][:,0:1]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['tau3'].fill(
+                        jet=msoftdrop,
+                        tau3=ak.flatten(fatjet_sortedpnmd.tau3[sel_reg][:,0:1]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['tau4_2'].fill(
+                        jet=msoftdrop,
+                        tau4_2=ak.flatten((fatjet_sortedpnmd.tau4/fatjet_sortedpnmd.tau2)[sel_reg][:,0:1]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['tau4_3'].fill(
+                        jet=msoftdrop,
+                        tau4_3=ak.flatten((fatjet_sortedpnmd.tau4/fatjet_sortedpnmd.tau3)[sel_reg][:,0:1]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['nConstituents'].fill(
+                        jet=msoftdrop,
+                        nConstituents=ak.flatten(fatjet_sortedpnmd.nConstituents[sel_reg][:,0:1]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['subjetpt'].fill(
+                        jet=msoftdrop,
+                        subjetpt=np.minimum(ak.flatten(ak.firsts(fatjet_sortedpnmd.subjets,axis=2).pt[sel_reg]), max(output['subjetpt'].axes[2].edges)-1),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['subjet2pt'].fill(
+                        jet=msoftdrop,
+                        subjet2pt=clip_value(
+                            ak.flatten(ak.firsts(fatjet_sortedpnmd.subjets[:,:,1:2],axis=2).pt[sel_reg]),
+                            min(output['subjet2pt'].axes[2].edges),
+                            max(output['subjet2pt'].axes[2].edges)
+                        ),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['subjet1_btag'].fill(
+                        jet=msoftdrop,
+                        subjet1_btag=ak.flatten(ak.firsts(fatjet_sortedpnmd.subjets[:,:,0:1],axis=2).btagDeepB[sel_reg]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['subjet2_btag'].fill(
+                        jet=msoftdrop,
+                        subjet2_btag=ak.flatten(ak.firsts(fatjet_sortedpnmd.subjets[:,:,1:2],axis=2).btagDeepB[sel_reg]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['subjet1_nBhadrons'].fill(
+                        jet=msoftdrop,
+                        subjet1_nBhadrons=ak.flatten(ak.firsts(fatjet_sortedpnmd.subjets[:,:,0:1],axis=2).nBHadrons[sel_reg]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['subjet2_nBhadrons'].fill(
+                        jet=msoftdrop,
+                        subjet2_nBhadrons=ak.flatten(ak.firsts(fatjet_sortedpnmd.subjets[:,:,1:2],axis=2).nBHadrons[sel_reg]),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
+                    output['deltar'].fill(
+                        jet=msoftdrop,
+                        deltar=ak.flatten(deltar[sel_reg],axis=None),
+                        systematic=syst,
+                        weight=evtWeight[sel_reg]
+                    )
                 fatjet_sortedbbvs = FatJet[ak.argsort(FatJet.deepTagMD_bbvsLight, ascending=False)]
                 output['hLeadingFatJetDeepTagMD_bbvsLight'].fill(
                     jet=msoftdrop,
@@ -431,9 +566,12 @@ if __name__ == '__main__':
     )
     if 'cutflow' in output.keys():
         print("Cutflow::")
-        for key in output['cutflow'].keys():
-            if key.startswith(sWeighted): continue
-            print("%10f\t%10d\t%s" % (output['cutflow'][sWeighted+key], output['cutflow'][key], key))
+        for msoftdrop in config['msoftdrop']:
+            for key in output['cutflow'][msoftdrop].keys():
+                print("%10f\t%10d\t%s" % (output['cutflow_weighted'][msoftdrop][key], 
+                        output['cutflow'][msoftdrop][key],
+                        key)
+                  )
     if sOutputFile is not None:
         if not sOutputFile.endswith('.root'): sOutputFile += '.root'
         sDir1 = f'evt/{config["lepton_selection"]}'# % (sample_category)
