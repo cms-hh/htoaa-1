@@ -42,6 +42,16 @@ class ObjectSelection:
     def selectFatJets(self, events):
         mask = ((events.FatJet.pt >= self.FatJetPtThsh)
                 & (abs(events.FatJet.eta) <= self.FatJetEtaThsh)
+                #subjet1
+                & (ak.is_none(ak.firsts(events.FatJet.subjets,axis=2), axis=-1) == 0)
+                & (ak.all(events.FatJet.subjets[:,:,0:1].pt > 110., axis=-1))
+                & (ak.all(abs(events.FatJet.subjets[:,:,0:1].eta) < 2.4, axis=-1))
+                & (ak.all(events.FatJet.subjets[:,:,0:1].btagDeepB > 0.1, axis=-1))
+                #subjet2
+                & (ak.is_none(ak.firsts(events.FatJet.subjets[:,:,1:2],axis=2), axis=-1) == 0)
+                & (ak.all(events.FatJet.subjets[:,:,1:2].pt > 30., axis=-1))
+                & (ak.all(abs(events.FatJet.subjets[:,:,1:2].eta) < 2.4, axis=-1))
+                & (ak.all(events.FatJet.subjets[:,:,1:2].btagDeepB > 0.1, axis=-1))
                 )
         return events.FatJet[mask]
 
