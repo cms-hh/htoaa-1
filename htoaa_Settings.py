@@ -6,10 +6,10 @@ from collections import OrderedDict as OD
 xrootd_redirectorName  = "root://xrootd-cms.infn.it//"
 # try / or // at the end
 xrootd_redirectorNames = [
+    #"root://cms-xrd-global.cern.ch/",
     "root://xrootd-cms.infn.it/",
-    "root://cms-xrd-global.cern.ch/",
-    "root://cmsxrootd.fnal.gov/",
-    "root://cms-xrd-global.cern.ch:1094/",
+    #"root://cmsxrootd.fnal.gov/",
+    #"root://cms-xrd-global.cern.ch:1094/",
 ]
 sampleFormat = "nanoAOD"
 
