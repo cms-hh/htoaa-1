@@ -153,18 +153,11 @@ def histograms(systList, msoftdrop):
         .Reg(10, -0.5, 9.5, name="ak4jetsize_notcleaned_mediumbtag", label="ak4jetsize_mediumbtag", overflow=True,underflow=True)
         .Weight()
     )
-    output['tau1'] = (
+    output['dr_lep_ak4jet'] = (
         hist.Hist.new
         .StrCat(msoftdrop, name="jet")
         .StrCat(['central'], name="systematic")
-        .Reg(50, 0., 1., name="tau1", label="tau1", overflow=True,underflow=True)
-        .Weight()
-    )
-    output['tau2'] = (
-        hist.Hist.new
-        .StrCat(msoftdrop, name="jet")
-        .StrCat(['central'], name="systematic")
-        .Reg(50, 0., 1., name="tau2", label="tau2", overflow=True,underflow=True)
+        .Reg(50, 0., 5., name="dr_lep_ak4jet", label="dr_lep_ak4jet", overflow=True,underflow=True)
         .Weight()
     )
     output['tau3'] = (
@@ -242,6 +235,41 @@ def histograms(systList, msoftdrop):
         .StrCat(msoftdrop, name="jet")
         .StrCat(['central'], name="systematic")
         .Reg(25, 0., 0.85, name="deltar", label="deltar", overflow=True,underflow=True)
+        .Weight()
+    )
+    output['dq_1'] = (
+        hist.Hist.new
+        .StrCat(msoftdrop, name="jet")
+        .StrCat(['central'], name="systematic")
+        .Reg(50, 0, 5, name="dq_1", label="dq_1", overflow=True,underflow=True)
+        .Weight()
+    )
+    output['db_1'] = (
+        hist.Hist.new
+        .StrCat(msoftdrop, name="jet")
+        .StrCat(['central'], name="systematic")
+        .Reg(50, 0, 5, name="db_1", label="db_1", overflow=True,underflow=True)
+        .Weight()
+    )
+    output['wq'] = (
+        hist.Hist.new
+        .StrCat(msoftdrop, name="jet")
+        .StrCat(['central'], name="systematic")
+        .Reg(5, 0.5, 5.5, name="wq", label="wq", overflow=True,underflow=True)
+        .Weight()
+    )
+    output['ak4_btag'] = (
+        hist.Hist.new
+        .StrCat(msoftdrop, name="jet")
+        .StrCat(['central'], name="systematic")
+        .Reg(50, 0, 1., name="ak4_btag", label="ak4_btag", overflow=True,underflow=True)
+        .Weight()
+    )
+    output['ak8jetsize'] = (
+        hist.Hist.new
+        .StrCat(msoftdrop, name="jet")
+        .StrCat(['central'], name="systematic")
+        .Reg(5, 0.5, 5.5, name="ak8jetsize", label="ak8jetsize", overflow=True,underflow=True)
         .Weight()
     )
     return output
