@@ -1,3 +1,4 @@
+
 #https://cms.cern.ch/iCMS/analysisadmin/cadilines?line=HIG-18-026&tp=an&id=2158&ancode=HIG-18-026
 #htoaa analysis main code
 #/afs/cern.ch/work/s/snandan/anaconda3/envs/myEnv/lib/python3.10/site-packages/boost_histogram/_internal/hist.py
@@ -47,7 +48,6 @@ nEventToReadInBatch = 0.5*10**6 # 2500000 #  1000 # 2500000
 nEventsToAnalyze =  -1 #-1 # 1000 # 100000 # -1
 sWeighted = "Wtd: "
 
-
 class HToAATo4bProcessor(processor.ProcessorABC):
     def __init__(self, datasetInfo={}):
 
@@ -81,25 +81,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             
             idxGenA_sortByMass = ak.argsort(genACollection.mass, axis=-1, ascending=False)
             
-            genBBar_pairs_all = ak.argcombinations(events.GenPart, 2, fields=['b', 'bbar'])
-            genBBar_pairs = genBBar_pairs_all[(
-                (abs(events.GenPart[genBBar_pairs_all['b'   ]].pdgId) == 5) &
-                (abs(events.GenPart[genBBar_pairs_all['bbar']].pdgId) == 5) &
-                ((events.GenPart[genBBar_pairs_all['b']].pdgId) == (-1*events.GenPart[genBBar_pairs_all['bbar']].pdgId)  ) &
-                (events.GenPart[genBBar_pairs_all['b']].genPartIdxMother == events.GenPart[genBBar_pairs_all['bbar']].genPartIdxMother) &
-                (events.GenPart[ events.GenPart[genBBar_pairs_all['b'   ]].genPartIdxMother ].pdgId == 36) &
-                (events.GenPart[ events.GenPart[genBBar_pairs_all['bbar']].genPartIdxMother ].pdgId == 36) &
-                (events.GenPart[genBBar_pairs_all['bbar']].genPartIdxMother != -1) &
-                (events.GenPart[genBBar_pairs_all['b']].genPartIdxMother != -1)
-            )]
-            # LorentVector of GenB quarks from HToAATo4b
-            nEvents_11 = ak.num(events.GenPart[genBBar_pairs['b']][:, 0].pt, axis=0)
-
-            # https://coffeateam.github.io/coffea/modules/coffea.nanoevents.methods.vector.html
-            LVGenB_0 = genparticle(events, genBBar_pairs['b'], 0)
-            LVGenBbar_0 = genparticle(events, genBBar_pairs['bbar'], 0)
-            LVGenB_1 = genparticle(events, genBBar_pairs['b'], 1)
-            LVGenBbar_1 = genparticle(events, genBBar_pairs['bbar'], 1) 
         # QCD MC ----------------------------------------------
         if self.config['isQCD'] :
             genBQuarks_QCD = events.GenPart[(
@@ -118,7 +99,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         preselmu = self.objectSelector.selectMuons(events)
         elesize = ak.sum(ak.num(preselele))
         musize = ak.sum(ak.num(preselmu))
-        is_triggered_1ele = events.HLT.Ele32_WPTight_Gsf
+        is_triggered_1ele = events.HLT.Ele28_eta2p1_WPTight_Gsf_HT150 #HLT.Ele32_WPTight_Gsf
         is_triggered_1mu = events.HLT.IsoMu24 | events.HLT.IsoMu27
         sel_triggered_1ele = (self.config['use_triggers_1e']) & is_triggered_1ele
         sel_triggered_1mu = (self.config['use_triggers_1mu']) & is_triggered_1mu
@@ -132,12 +113,12 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         trig_obj_mu = (abs(events.TrigObj.id) == 13) & ( (events.TrigObj.filterBits & 8) == 8 )
 
         if self.config['isSignal']:
-            sel_names_GEN = ["1GenHiggs", "2GenA", "2GenAToBBbarPairs", "dR_GenH_GenB_0p8"]
-            FatJet = FatJet[(FatJet.delta_r(LVGenB_0) <0.8)
-                            & (FatJet.delta_r(LVGenB_1) <0.8)
-                            & (FatJet.delta_r(LVGenBbar_0) < 0.8)
-                            & (FatJet.delta_r(LVGenBbar_1) < 0.8)
-            ]
+            events['GenPart'] = ak.with_field(events.GenPart,
+                        (abs(events.GenPart.pdgId) == 5)
+                      & (events.GenPart[events.GenPart.genPartIdxMother].pdgId == 36),
+                        'bfroma'
+              )
+            #FatJet = FatJet[ak.all(FatJet.metric_table(events.GenPart[events.GenPart.bfroma]) <0.8, axis=-1)]
             '''selection.add("1GenHiggs", ak.num(genHiggs) == 1)
             selection.add("2GenA", ak.num(genACollection) == 2)
             selection.add("2GenAToBBbarPairs", ak.num(genBBar_pairs) == 2)'''
@@ -154,7 +135,22 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         output = histograms(systList, self.config['msoftdrop'])
         output['cutflow'] = {}
         output['cutflow_weighted'] = {}
-        #for lepton in self.config['lepton_selection']:#['tight_lep', 'fake_lepton']:
+        events['GenPart'] = ak.with_field(events.GenPart, ak.local_index(events.GenPart, axis=1), 'idx')
+        events['GenPart'] = ak.with_field(events.GenPart,
+                        (abs(events.GenPart.pdgId)==5)
+                      & (abs(events.GenPart[events.GenPart.genPartIdxMother].pdgId) == 6),
+                      'bfromtop'
+        )
+        events['GenPart'] = ak.with_field(events.GenPart,
+                        (abs(events.GenPart.pdgId)==24)
+                        & (abs(events.GenPart[events.GenPart.genPartIdxMother].pdgId) == 6),
+                        'wfromtop'
+        )
+        events['GenPart'] = ak.with_field(events.GenPart,
+                        (abs(events.GenPart.pdgId) < 6)
+                    & (abs(events.GenPart[events.GenPart.genPartIdxMother].pdgId) == 24),
+                        'qfromW'
+        )
         if self.config['lepton_selection'] == 'tight_lep':
             selele = preselele[preselele.tight_ele]
             selmu = preselmu[preselmu.tight_mu]
@@ -184,11 +180,26 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 selFatJet = FatJet[(FatJet.msoftdrop < 90)
                     & (ak.all(FatJet.metric_table(sellep)>0.8, axis=-1))
                 ]
+            delta_wq = selFatJet[:,0:1].metric_table(events.GenPart[events.GenPart.qfromW])
+            if not self.config['isSignal']:
+                delta_b = selFatJet[:,0:1].metric_table(events.GenPart[events.GenPart.bfromtop])
+            else:
+                delta_b = selFatJet[:,0:1].metric_table(events.GenPart[events.GenPart.bfroma])
             ak4jet_cleaned_wrt_lepton = ak4Jet[ak.all(ak4Jet.metric_table(sellep)>0.4, axis=-1)]
             ak4jet_cleaned = ak4jet_cleaned_wrt_lepton[
                 ak.all(ak4jet_cleaned_wrt_lepton.metric_table(selFatJet[:,0:1])>0.8, axis=-1)
             ]
+            ak4jet_cleaned_opshemi = ak4jet_cleaned[
+                (ak4jet_cleaned.pt > 30)
+                & ((ak4jet_cleaned.puId & 7) == 7)
+                & ak.all(abs(ak4jet_cleaned.metric_table(selFatJet[:,0:1]#)>0.8, axis=-1)
+                ,metric=lambda a, b: a.delta_phi(b))) > (3.14159265/2.), axis=-1)
+            ]
             nbtag_medium = ak.num(ak4jet_cleaned[ak4jet_cleaned.btagDeepFlavB > 0.2770])
+            if not self.config['isSignal']:
+                bmatched_ak4jet = ak4jet_cleaned[ak.any(ak4jet_cleaned.metric_table(events.GenPart[events.GenPart.bfromtop]) <0.4, axis=-1)]
+            else:
+                bmatched_ak4jet = ak4jet_cleaned[ak.any(ak4jet_cleaned.metric_table(events.GenPart[events.GenPart.bfroma]) <0.4, axis=-1)]
             ak4jet_notcleaned = ak4Jet[
                 ak.all(ak4Jet.metric_table(selFatJet[:,0:1])<=0.8, axis=-1)
             ]
@@ -203,13 +214,13 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 selection.add( self.config['lepton_selection'], (ak.num(sellep_all) > 0)\
                     & (ak.num(sellep_tight) == 0)\
                 )
-            selection.add('nbtag_medium==0', nbtag_medium == 0)
             if msoftdrop == 'msoftdrop_GE_90':
                 selection.add(msoftdrop, ak.num(selFatJet) > 0)
             else:
                 selection.add(msoftdrop, (ak.num(selFatJet) > 0)\
                   & (ak.num(FatJet[FatJet.msoftdrop > 90]) == 0))
-            selection.add("met", events.MET.pt >= 30)
+            selection.add('ak4jet with nbtag_medium==0', nbtag_medium == 0)
+            selection.add("met", events.MET.pt >= 20)
             selection.add("triggered", sel_triggered_1ele | sel_triggered_1mu)
             selection.add("trigObj_matched_lep",\
                (ak.any(trigObj_matched_ele, axis=-1) & (sel_triggered_1ele))\
@@ -272,6 +283,39 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                     systematic=syst,
                     weight=evtWeight[sel_reg]
                 )
+                #print(ak.sum(ak.num(ak.flatten(delta_wq[sel_reg][:,0:1],axis=0))), '\tweight ', ak.num(evtWeight[sel_reg],axis=0))
+                output['dq_1'].fill(
+                    jet=msoftdrop,
+                    dq_1=clip_value(
+                        ak.flatten(delta_wq[sel_reg],axis=None),#[:,:, 0:1], axis=None),
+                        min(output['dq_1'].axes[2].edges),
+                        max(output['dq_1'].axes[2].edges)
+                    ),
+                    systematic=syst
+                    #weight=evtWeight[sel_reg]
+                )
+                output['db_1'].fill(
+                    jet=msoftdrop,
+                    db_1=clip_value(
+                        ak.flatten(delta_b[sel_reg],axis=None),#[:,:, 0:1], axis=None),
+                        min(output['dq_1'].axes[2].edges),
+                        max(output['dq_1'].axes[2].edges)
+                    ),
+                    systematic=syst
+                    #weight=evtWeight[sel_reg]
+                )
+                output['wq'].fill(
+                    jet=msoftdrop,
+                    wq=clip_value(
+                        ak.flatten(
+                            abs(events.GenPart[events.GenPart.qfromW].pdgId)
+                            [sel_reg],axis=None),
+                        min(output['wq'].axes[2].edges),
+                        max(output['wq'].axes[2].edges)
+                    ),
+                    systematic=syst
+                    #weight=evtWeight[sel_reg]
+                )
                 output['hLeadingFatJetMSoftDrop'].fill(
                     jet=msoftdrop,
                     hLeadingFatJetMSoftDrop=clip_value(
@@ -323,7 +367,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                     weight=evtWeight[sel_reg]
                 )
                 if syst == 'central':
-                    cut_womet = ['nPV', msoftdrop]#, 'triggered']
+                    cut_womet = ['nPV']#, msoftdrop]#, 'triggered']
                     ele = events.Electron#[events.Electron.mvaTTH > -0.6]
                     mu = events.Muon#[events.Muon.mvaTTH > -0.6]
                     mva_lep = ak.with_name(ak.concatenate([ele,mu], axis=1), "PtEtaPhiMCandidate")
@@ -401,17 +445,17 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                         systematic=syst,
                         weight=evtWeight[sel_reg]
                     )
-                    output['tau1'].fill(
+                    output['dr_lep_ak4jet'].fill(
                         jet=msoftdrop,
-                        tau1=ak.flatten(fatjet_sortedpnmd.tau1[sel_reg][:,0:1]),
-                        systematic=syst,
-                        weight=evtWeight[sel_reg]
-                    )
-                    output['tau2'].fill(
-                        jet=msoftdrop,
-                        tau2=ak.flatten(fatjet_sortedpnmd.tau2[sel_reg][:,0:1]),
-                        systematic=syst,
-                        weight=evtWeight[sel_reg]
+                        dr_lep_ak4jet=clip_value(
+                            ak.flatten(ak4jet_cleaned[:,0:1].metric_table(sellep)[sel_reg]
+                            ,axis=None
+                            ),
+                            min(output['dr_lep_ak4jet'].axes[2].edges),
+                            max(output['dr_lep_ak4jet'].axes[2].edges)
+                        ),
+                        systematic=syst
+                        #weight=evtWeight[sel_reg]
                     )
                     output['tau3'].fill(
                         jet=msoftdrop,
@@ -465,6 +509,12 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                         systematic=syst,
                         weight=evtWeight[sel_reg]
                     )
+                    output['ak4_btag'].fill(
+                        jet=msoftdrop,
+                        ak4_btag=ak.flatten(bmatched_ak4jet.btagDeepFlavB[sel_reg]),
+                        systematic=syst
+                        #weight=evtWeight[sel_reg]
+                    )
                     output['subjet1_nBhadrons'].fill(
                         jet=msoftdrop,
                         subjet1_nBhadrons=ak.flatten(ak.firsts(fatjet_sortedpnmd.subjets[:,:,0:1],axis=2).nBHadrons[sel_reg]),
@@ -493,6 +543,12 @@ class HToAATo4bProcessor(processor.ProcessorABC):
                 output['hLeadingFatJetMass'].fill(
                     jet=msoftdrop,
                     hLeadingFatJetMass=(ak.flatten(fatjet_sortedbbvs.mass[sel_reg][:, 0:1])),
+                    systematic=syst,
+                    weight=evtWeight[sel_reg]
+                )
+                output['ak8jetsize'].fill(
+                    jet=msoftdrop,
+                    ak8jetsize=(ak.num(selFatJet)[sel_reg]),
                     systematic=syst,
                     weight=evtWeight[sel_reg]
                 )
@@ -532,7 +588,8 @@ if __name__ == '__main__':
     for sInputFile in sInputFiles:
         if "*" in sInputFile:
             sInputFiles_toUse.extend( glob.glob( sInputFile ) )
-        elif 'eos' not in sInputFile:
+        #elif 'eos' not in sInputFile:
+        elif sInputFile.startswith('/store'):
             sInputFile = setXRootDRedirector(sInputFile)
             sFileLocal = f'/tmp/snandan/inputFiles/{process_name}/{os.path.basename(sInputFile)}'
             if xrdcpFile(sInputFile, sFileLocal, nTry = 3):
