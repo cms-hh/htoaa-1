@@ -36,7 +36,9 @@ class analysis_wrapper():
                  applystitching,
                  sAnalysis,
                  lepton_selection,
-                 msoftdrop
+                 msoftdrop,
+                 use_inclusive_WJets,
+                 use_HT_WJets
         ):
         self.era = era
         self.run_mode = run_mode
@@ -52,10 +54,12 @@ class analysis_wrapper():
         self.sAnalysis = sAnalysis
         self.lepton_selection = lepton_selection
         self.msoftdrop = msoftdrop
+        self.use_HT_WJets = use_HT_WJets
+        self.use_inclusive_WJets = use_inclusive_WJets
 
         self.pwd = os.getcwd()
         self.DestinationDir = "./%s" % (anaVersion)
-        if "/afs/cern.ch/" in self.pwd: self.DestinationDir = "/afs/cern.ch/work/s/snandan/public/myforkhtoaa/htoaa-1/%s" % (anaVersion)
+        if "/afs/cern.ch/" in self.pwd: self.DestinationDir = f'/afs/cern.ch/work/s/snandan/public/myforkhtoaa/htoaa-1/{anaVersion}'
         self.sFileRunCommand = "%s/%s" % (self.DestinationDir, sRunCommandFile)
         self.sFileJobSubLog  = "%s/%s" % (self.DestinationDir, sJobSubLogFile)
         if not os.path.exists(self.DestinationDir): os.mkdir(self.DestinationDir)
@@ -84,6 +88,7 @@ class analysis_wrapper():
         self.run_haddJobs(stage=1.5)
         if 'data_obs' in self.selSamplesToRun_list:
             self.run_addBackgrounds()
+        self.plot_variables()
 
     def run_analysisJobs(self):
         condor_ana = condor(self.sAnalysis, self.sFileJobSubLog)
@@ -105,17 +110,18 @@ class analysis_wrapper():
                         if 'TTG' in process_name: break
                         #if 'Enriched' not in process_name: break
                         if not self.applystitching:
-                            if sample_category == 'WJets' and (re.findall('^W[1-4]Jets', process_name) or ('HT-' in process_name)):
-                                break
-                            #if leptonselection == 'Fake' and 'SUSY' in process_name:
-                            #break
+                            if self.use_inclusive_WJets:
+                                if sample_category == 'WJets' and (re.findall('^W[1-4]Jets', process_name) or ('HT-' in process_name)):
+                                    break
+                            elif self.use_HT_WJets:
+                                if sample_category == 'WJets' and ('HT-' not in process_name):
+                                    break
                         if selSample in process_name or selSample in sample_category:
                             skipThisSample= False
                             break
                 if skipThisSample:
                     continue
-
-                fileList = sampleInfo[sampleFormat]
+                fileList = sampleInfo["nanoAOD"] if self.run_file == 'count_genweight' else sampleInfo["nanoAOD_fromeos"]
                 files = []
                 for iEntry in fileList:
                     if "*" in iEntry:
@@ -297,14 +303,15 @@ class analysis_wrapper():
                 cmd = f'python3 addBackgrounds.py -p {ifile} -o {ofile} -s {samples} -syst topt_reweigingUp topt_reweigingDown'
                 print('cmd: ', cmd)
                 os.system(cmd)
-'''
-if 1:#do_hadd:
-    if run_file == 'count_genweight':
-        outputfile = 'hadd_countgenWeight.root'
-    elif run_file == 'stitch':
-        outputfile = 'hadd_stitch.root'
-    else:
-        outputfile = 'hadd_apply_stitch.root'
-    cmd = f'python3 hadd.py -p {DestinationDir} -o {outputfile}'
-    os.system(cmd)
-'''
+
+    def plot_variables(self):
+        input_path = os.path.join(self.DestinationDir, 'hadd', 'output', 'hadd_stage1.root')
+        output_path = os.path.join(self.DestinationDir, 'plot_variables')
+        if not os.path.exists(output_path): os.mkdir(output_path)
+        f = open('list_variables_to_plot.py', 'r')
+        varlist = f.readlines()
+        var = ' '.join([v.strip() for v in varlist])
+        sig = ' '.join(['SUSY_WH_WToAll_HToAATo4B_Pt150_M-15', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-30', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-60'])
+        cmd = f'python3 test_1.py -p {input_path} -o {output_path} -v {var} -s {sig} -b TT ST WJets'
+        print('cmd: ', cmd)
+        os.system(cmd)
