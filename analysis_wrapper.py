@@ -20,10 +20,12 @@ if __name__ == '__main__':
     parser.add_argument('-ResubWaitingTime',  type=int, default=5, help='Resubmit failed jobs after every xx minutes')
     parser.add_argument('-iJobSubmission',    type=int, default=0,  help='Job submission iteration. Specify previous last job submittion iteration if script terminated for some reason.')
     parser.add_argument('-dryRun',            action='store_true', default=False)
-    parser.add_argument('-rf', '--run_file',    type=str, default='analysis', choices=['analysis', 'count_genweight', 'stitch'])
-    parser.add_argument('-as', '--applystitching', action='store_false', default=True)
+    parser.add_argument('-rf', '--run_file',    type=str, default='analysis', choices=['analysis', 'count_genweight', 'stitch', 'count_pu'])
+    parser.add_argument('-as', '--applystitching', action='store_true', default=False)
     parser.add_argument('-ls', dest='lepton_selection', type=str, required=True)
     parser.add_argument('-ms', dest='msoftdrop', type=str, nargs='+', required=True)
+    parser.add_argument('-inclu', dest='use_inclusive_WJets', action='store_true', default=False)
+    parser.add_argument('-ht', dest='use_HT_WJets', action='store_false', default=True)
 
     args=parser.parse_args()
     print("args: {}".format(args))
@@ -34,6 +36,8 @@ if __name__ == '__main__':
         sAnalysis = 'countSumEventsInSample.py'
     elif args.run_file == 'stitch':
         sAnalysis = 'count_LHE_HT.py'
+    elif args.run_file == 'count_pu':
+        sAnalysis = 'count_pu.py'
 
     analysis = analysis_wrapper(
         era              = args.era,
@@ -49,5 +53,7 @@ if __name__ == '__main__':
         applystitching   = args.applystitching,
         sAnalysis        = sAnalysis,
         lepton_selection = args.lepton_selection,
-        msoftdrop        = args.msoftdrop
+        msoftdrop        = args.msoftdrop,
+        use_inclusive_WJets = args.use_inclusive_WJets,
+        use_HT_WJets        = args.use_HT_WJets
     )
