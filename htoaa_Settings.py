@@ -11,7 +11,6 @@ xrootd_redirectorNames = [
     #"root://cmsxrootd.fnal.gov/",
     #"root://cms-xrd-global.cern.ch:1094/",
 ]
-sampleFormat = "nanoAOD"
 
 Era_2016 = '2016'
 Era_2017 = '2017'
