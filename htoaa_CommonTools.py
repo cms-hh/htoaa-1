@@ -49,6 +49,23 @@ def xrdcpFile(sFileName, sFileNameLocal, nTry = 3):
             return True
     return False
 
+def get_lf(files, name):
+    sInputFiles_toUse = []
+    for f in files:
+        if "*" in f:
+            sInputFiles_toUse.extend(glob.glob(f))
+        elif 'eos' not in f:
+            sInputFile = setXRootDRedirector(f)
+            sFileLocal = f'/tmp/snandan/inputFiles/{name}/{os.path.basename(f)}'
+            if xrdcpFile(sInputFile, sFileLocal, nTry = 3):
+                sInputFiles_toUse.append(sFileLocal)
+            else:
+                print(f"Ip file {f} failed to download \t **** ERROR ****")
+                exit(1)
+        else:
+            sInputFiles_toUse.append(f)
+    return sInputFiles_toUse
+
 def GetDictFromJsonFile(filePath):
     # Lines starting with '#' are not read out, and also content between '/* .... */' are not read.
     # Content between " '''   ....  ''' " are not read
