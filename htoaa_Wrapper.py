@@ -88,12 +88,13 @@ class analysis_wrapper():
         self.run_haddJobs(stage=1.5)
         if 'data_obs' in self.selSamplesToRun_list:
             self.run_addBackgrounds()
-        self.plot_variables()
+        if self.run_file == 'analysis':
+            self.plot_variables()
 
     def run_analysisJobs(self):
         condor_ana = condor(self.sAnalysis, self.sFileJobSubLog)
         iJobSubmission = 0
-        while iJobSubmission <= self.nResubmissionMax:
+        while True:
             if self.dryRun and iJobSubmission >0: break
             condor_ana.initialize_list()
             print('\n\n%s \t Startiing iJobSubmission for analysis: %d  \n' % (datetime.now().strftime("%Y/%m/%d %H:%M:%S"), iJobSubmission))
@@ -121,7 +122,7 @@ class analysis_wrapper():
                             break
                 if skipThisSample:
                     continue
-                fileList = sampleInfo["nanoAOD"] if self.run_file == 'count_genweight' else sampleInfo["nanoAOD_fromeos"]
+                fileList = sampleInfo["nanoAOD_fromeos"] if self.run_file == 'analysis' else sampleInfo["nanoAOD"]
                 files = []
                 for iEntry in fileList:
                     if "*" in iEntry:
@@ -134,9 +135,7 @@ class analysis_wrapper():
                     sample_sumEvents   = sample_exist[1]
                 else:
                     sample_sumEvents   = sampleInfo["sumEvents"] if (sample_category != kData) else None
-                nSplits = int(len(files) / self.nFilesPerJob) if self.nFilesPerJob > 0 else 1
-                nSplits = 1 if nSplits==0 else nSplits
-                files_splitted = np.array_split(files, nSplits)
+                files_splitted = [files[i:i+self.nFilesPerJob] for i in range(0, len(files)+1, self.nFilesPerJob)]
                 sampledir = os.path.join(self.DestinationDir, process_name)
                 for iJob in range(len(files_splitted)):
                     #config = config_Template.deepcopy()
@@ -153,7 +152,7 @@ class analysis_wrapper():
                     jobStatus = condor_ana.check_jobstatus(printLevel >= 3)
                     if jobStatus == 0:
                         config["era"] = self.era
-                        config["inputFiles"] = list( files_splitted[iJob] )
+                        config["inputFiles"] = files_splitted[iJob]
                         config["outputFile"] = condor_ana.sOpRootFile_to_use
                         config["sampleCategory"] = sample_category
                         config['process_name'] = process_name
@@ -312,6 +311,6 @@ class analysis_wrapper():
         varlist = f.readlines()
         var = ' '.join([v.strip() for v in varlist])
         sig = ' '.join(['SUSY_WH_WToAll_HToAATo4B_Pt150_M-15', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-30', 'SUSY_WH_WToAll_HToAATo4B_Pt150_M-60'])
-        cmd = f'python3 test_1.py -p {input_path} -o {output_path} -v {var} -s {sig} -b TT ST WJets'
+        cmd = f'python3 plotvar.py -p {input_path} -o {output_path} -v {var} -s {sig} -b TT ST WJets'
         print('cmd: ', cmd)
         os.system(cmd)
