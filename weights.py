@@ -3,6 +3,7 @@ from auxiliary import top_pT_reweighting
 import json
 import numpy as np
 import awkward as ak
+import uproot
 from coffea.analysis_tools import Weights
 
 class event_weights():
@@ -10,6 +11,8 @@ class event_weights():
         self.events = events
         self.nevents = len(events)
         self.config = config
+        self.pu_hardmax = 3
+        self.pu_maxshift = 0.0025
         stitchingfile = 'stitchinginfo.json'
         with open(stitchingfile) as fSamplesInfo:
             self.stitchinginfo = json.load(fSamplesInfo)
@@ -48,11 +51,36 @@ class event_weights():
                     self.stitch_weight
                 )
 
+    def calculate_puweight(self):
+        #https://twiki.cern.ch/twiki/bin/view/CMS/PileupJSONFileforData#Recommended_cross_section
+        pu_data = uproot.open('/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PileUp/UltraLegacy/PileupHistogram-goldenJSON-13tev-2018-69200ub-99bins.root')['pileup'].to_hist()
+        pu_mc = uproot.open(f'/afs/cern.ch/work/s/snandan/public/myforkhtoaa/htoaa-1/countpileup/SUSY_WH_WToAll_HToAATo4B_Pt150_M-12/output/analyze_htoaa_SUSY_WH_WToAll_HToAATo4B_Pt150_M-12_0_0.root')[f'evt/SUSY_WH_WToAll_HToAATo4B_Pt150_M-12/SUSY_WH_WToAll_HToAATo4B_Pt150_M-12']
+        pu_w = np.divide(pu_data.values()/pu_data.values().sum(), pu_mc.values()/pu_mc.values().sum(), where=pu_mc.values()>0, out=np.ones_like(pu_data.values()))
+        clipped = pu_w.copy()
+        while True:
+            clipped= np.minimum(clipped, self.pu_hardmax)
+            sf = 1/(1+(np.sum(clipped)-np.sum(pu_w))/np.sum(pu_w))
+            clipped *= sf
+            if sf <= (1+self.pu_maxshift):
+                break
+        clipped_pu_w = clipped
+        self.pileupWeight = np.ones(self.nevents)
+        for npu in range(0, len(pu_data.values()+1)):
+            self.pileupWeight = ak.where(
+                np.logical_and(
+                    np.greater_equal(self.events.Pileup.nTrueInt, npu),
+                    np.less(self.events.Pileup.nTrueInt, npu+1)
+                ),
+                clipped_pu_w[npu],
+                self.pileupWeight
+            )
+
     def calculate_weight(self):
         weights = Weights(self.nevents, storeIndividual=True)
         self.stitch_weight = np.full(self.nevents, self.config["lumiScale"])
         if self.config['isMC']:
             self.calculate_genweight()
+            self.calculate_puweight()
             if self.config["applystitching"]:
                 self.calculate_stitchingweight()
                 weights.add(
@@ -69,16 +97,16 @@ class event_weights():
                 weight=self.events.genWeight
             )
             weights.add(
-                "btagWeight",
-                weight=(self.events.btagWeight.DeepCSVB)
+                "puWeight",
+                weight=self.pileupWeight
             )
             if self.config['sampleCategory'].startswith('TT'):
                 topt_reweiging = ak.to_numpy(top_pT_reweighting(self.events.GenPart)).squeeze()
                 weights.add(
                     "topt_reweiging",
                     weight=topt_reweiging,
-                    weightUp=topt_reweiging**2,  # w**2                                               
-                    weightDown=ak.ones_like(topt_reweiging)  # w = 1                                  
+                    weightUp=topt_reweiging**2,  # w**2
+                    weightDown=ak.ones_like(topt_reweiging)  # w = 1
                 )
             
         return weights
