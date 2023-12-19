@@ -27,20 +27,24 @@ sampleDetail_dict_template = OD([
     (sCross_section, -1.),
     (sNEvents, -1),
     (sSumEvents, -1),
-    (sNanoAOD, []),
     (sc, ''),
-    (sNanoAOD_nFiles, -1)
+    (sNanoAOD_nFiles, -1),
+    (sNanoAOD, [])
 ])
 #/eos/cms/store/group/phys_susy/HToaaTo4b/NanoAOD/2018/MC/TTJets_SingleLeptFromT_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL18NanoAODv9/112F42A6-4315-D547-9161-DB39ECC06CB2.root
 def getDatasetFilesFromeos(datasetName_parts):
-    prefix = '/eos/cms/store/group/phys_susy/HToaaTo4b/NanoAOD/2018/MC'
+    datatype = 'data' if re.findall('Run2018[A-D]', datasetName_parts[1]) else 'MC'
+    prefix = f'/eos/cms/store/group/phys_susy/HToaaTo4b/NanoAOD/2018/{datatype}/PNet_v1_2023_10_06/{datasetName_parts[0]}/skims/Hto4b_0p8/'
     campaign = datasetName_parts[1].split('-')[0]
-    path = os.path.join(prefix, datasetName_parts[0], campaign)
+    path = prefix#os.path.join(prefix, datasetName_parts[0], campaign)
     files = glob.glob(f'{path}/*root')
     nFiles = len(files)
     nEventsTotal = 0
     sumEvents = 0
     for idx, file in enumerate(files):
+        events = uproot.open(f'{file}:Events')['event'].num_entries
+        nEventsTotal += events#len(events.array())
+        #sys.exit()
         with uproot.open(file) as f:
             nevents = np.array(f['Events']['event'].array())
             nEventsTotal += len(nevents)
@@ -48,7 +52,7 @@ def getDatasetFilesFromeos(datasetName_parts):
             genevents = np.array(f['Events']['genWeight'].array())
             nevents = np.copysign(nevents, genevents)
             sumEvents += np.sum(nevents)
-    return sumEvents, nEventsTotal, nFiles, files
+    return nEventsTotal, nFiles, files
 
 def getprocess_name(datasetName_parts):
     campaign = datasetName_parts[1]#.split('-')[0]
@@ -92,6 +96,8 @@ def getsample_category(name):
         return 'ZZZ'
     elif name.startswith('ZZTo'):
         return 'ZZ'
+    elif name.startswith('DY'):
+        return 'DY'
     elif 'Run' in name:
         return 'data_obs'
     else:
@@ -167,18 +173,23 @@ if __name__ == '__main__':
             del sampleDetails_dict[sSumEvents]
 
         sumEvents = -1
-        if 0:
-            sumEvents, nEventsTotal, nFiles, files = getDatasetFilesFromeos(datasetName_parts)
+        if 1:
+            nEventsTotal_fromeos, nFiles_fromeos, files_fromeos = getDatasetFilesFromeos(datasetName_parts)
+            nEventsTotal, nFiles, files = getDatasetFiles(datasetName)
         else:
             nEventsTotal, nFiles, files = getDatasetFiles(datasetName)
         sampleDetails_dict[sNEvents] = nEventsTotal
         sampleDetails_dict[sSumEvents] = sumEvents
         sampleDetails_dict[sNanoAOD_nFiles] = nFiles
+        sampleDetails_dict[sNEvents+'_fromeos'] = nEventsTotal_fromeos
+        sampleDetails_dict[sNanoAOD_nFiles+'_fromeos'] = nFiles_fromeos
         sampleDetails_dict[pn] = getprocess_name(datasetName_parts)
         if 'Run20' not in datasetName_parts[1]:
             sampleDetails_dict[sc] = getsample_category(datasetName_parts[0])
         else:
             sampleDetails_dict[sc] = 'data_obs'
+        if nFiles_fromeos != 0:
+            sampleDetails_dict[sNanoAOD+'_fromeos'] = files_fromeos
         sampleDetails_dict[sNanoAOD] = files
         samples_details[datasetName] = sampleDetails_dict
 
