@@ -26,7 +26,8 @@ References:
 from coffea import processor, util
 from coffea.nanoevents import schemas
 from coffea.nanoevents.methods import nanoaod, vector
-from coffea.analysis_tools import PackedSelection, Weights
+from coffea.analysis_tools import PackedSelection
+from weights import event_weights
 #import hist
 from coffea import hist
 import awkward as ak
@@ -36,7 +37,7 @@ import uproot
 from htoaa_Settings import *
 from htoaa_CommonTools import (
     GetDictFromJsonFile, setXRootDRedirector,
-    xrdcpFile
+    get_lf
 )
 
 printLevel = 0
@@ -50,7 +51,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
     def __init__(self, datasetInfo={}):
 
         ak.behavior.update(nanoaod.behavior)
-        self.datasetInfo = datasetInfo
+        self.config = datasetInfo
         dataset_axis    = hist.Cat("dataset", "Dataset")
         systematic_axis = hist.Cat("systematic", "Systematic Uncertatinty")
         cutFlow_axis  = hist.Bin("CutFlow",   r"Cuts", 21, -0.5, 20.5)
@@ -100,8 +101,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
 
     def process(self, events):
         dataset = events.metadata["dataset"] # dataset label
-        self.datasetInfo[dataset]['isSignal'] = False
-        self.datasetInfo[dataset]['isQCD'] = False
 
         if nEventsToAnalyze != -1:
             print(f"\n (run:ls:event): {ak.zip([events.run, events.luminosityBlock, events.event])}")
@@ -124,7 +123,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         sel_posGenWgt = None
         sel_negGenWgt = None        
         
-        if self.datasetInfo[dataset]["isMC"]:
+        if self.config["isMC"]:
             selection.add("posGenWgt", (events.genWeight > 0))
             selection.add("negGenWgt", (events.genWeight < 0))
 
@@ -136,26 +135,15 @@ class HToAATo4bProcessor(processor.ProcessorABC):
         ################
 
         # create a processor Weights object, with the same length as the number of events in the chunk
-        weights     = Weights(len(events))
-        weights_gen = Weights(len(events))
-
-        genweight_unique = set(events.genWeight)
-        count = {}
-        for gu in genweight_unique:
-            count[gu] = ak.sum(ak.where(events.genWeight==gu, 1,0))
-        count = sorted([(k,v) for k,v in count.items()], key=lambda kv: kv[1], reverse=True)
-        events.genWeight = ak.where(events.genWeight >3*count[0][0], 3*count[0][0], events.genWeight)
-        if self.datasetInfo[dataset]["isMC"]:
-            weights_gen.add(
-                "genWeight",
-                weight=events.genWeight#np.copysign(np.ones(len(events)), events.genWeight)
-            )
+        evt_weights = event_weights(events, self.config)
+        evt_weights.calculate_genweight()
+        weights_gen = evt_weights.events.genWeight
         ###################
         # FILL HISTOGRAMS
         ###################
 
         systList = []
-        if self.datasetInfo[dataset]['isMC']:
+        if self.config['isMC']:
             if shift_syst is None:
                 systList = [
                     "central"
@@ -166,11 +154,6 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             systList = ["noweight"]
 
         output['cutflow']['all events'] += len(events)
-        output['cutflow'][sWeighted+'all events'] += weights.weight().sum() 
-        for n in selection.names:
-            sel_i = selection.all(n)
-            output['cutflow'][n] += sel_i.sum()
-            output['cutflow'][sWeighted+n] += weights.weight()[sel_i].sum()
 
         for syst in systList:
 
@@ -178,13 +161,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             weightSyst = syst
             
             # in the case of 'central', or the jet energy systematics, no weight systematic variation is used (weightSyst=None)
-            if syst in ["central", "JERUp", "JERDown", "JESUp", "JESDown"]:
-                weightSyst = None
-            if syst == "noweight":
-                evtWeight = np.ones(len(events))
-            else:
-                evtWeight     = weights.weight(weightSyst)
-                evtWeight_gen = weights_gen.weight(weightSyst)
+            evtWeight_gen = weights_gen
             # all events
             iBin = 0
             output['hCutFlow'].fill(
@@ -194,7 +171,7 @@ class HToAATo4bProcessor(processor.ProcessorABC):
             )
             # MC ----------------------------------------------
             iBin = 1
-            if self.datasetInfo[dataset]["isMC"]:
+            if self.config["isMC"]:
                 output['hCutFlow'].fill(
                     dataset=dataset,
                     CutFlow=(ones_list * iBin),
@@ -237,24 +214,7 @@ if __name__ == '__main__':
         sample_nEvents      = config["nEvents"]
         sample_sumEvents    = config["sumEvents"] if config["sumEvents"] != -1 else sample_nEvents
         if sample_sumEvents == -1: sample_sumEvents = 1 # Case when sumEvents is not calculated
-    #branchesToRead = htoaa_nanoAODBranchesToRead
-    #print("branchesToRead: {}".format(branchesToRead))
-
-    sInputFiles_toUse = []
-    for sInputFile in sInputFiles:
-        if "*" in sInputFile:
-            sInputFiles_toUse.extend( glob.glob( sInputFile ) )
-        elif 'eos' not in sInputFile:
-            sInputFile = setXRootDRedirector(sInputFile)
-            sFileLocal = f'/tmp/snandan/inputFiles/{process_name}/{os.path.basename(sInputFile)}'
-            if xrdcpFile(sInputFile, sFileLocal, nTry = 3):
-                sInputFiles_toUse.append(sFileLocal)
-            else:
-                print(f"Ip file {sInputFile} failed to download \t **** ERROR ****")
-                exit(1)
-        else:
-            sInputFiles_toUse.append( sInputFile )
-    sInputFiles = sInputFiles_toUse
+    sInputFiles = get_lf(config["inputFiles"], process_name)
     startTime = time.time()
     tracemalloc.start()
     chunksize = nEventToReadInBatch
@@ -274,10 +234,7 @@ if __name__ == '__main__':
         fileset={sample_category: sInputFiles},
         treename="Events",
         processor_instance=HToAATo4bProcessor(
-            datasetInfo={
-                "era": era, 
-                sample_category: {"isMC": isMC}
-            }
+            datasetInfo=config
         )
     )
 
@@ -287,7 +244,7 @@ if __name__ == '__main__':
         print("Cutflow::")
         for key in output['cutflow'].keys():
             if key.startswith(sWeighted): continue
-            print("%10f\t%10d\t%s" % (output['cutflow'][sWeighted+key], output['cutflow'][key], key))
+            print("%10d\t%s" % (output['cutflow'][key], key))
 
     if sOutputFile is not None:
         if not sOutputFile.endswith('.root'): sOutputFile += '.root'
