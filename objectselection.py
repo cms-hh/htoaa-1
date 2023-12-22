@@ -42,21 +42,32 @@ class ObjectSelection:
     def selectFatJets(self, events):
         mask = ((events.FatJet.pt >= self.FatJetPtThsh)
                 & (abs(events.FatJet.eta) <= self.FatJetEtaThsh)
+                & (60 < events.FatJet.msoftdrop)
+                & (events.FatJet.msoftdrop < 160)
+                #& (60 < events.FatJet.particleNet_massH_Hto4b_v0)
+                #& (events.FatJet.particleNet_massH_Hto4b_v0 < 160)
                 #subjet1
-                & (ak.is_none(ak.firsts(events.FatJet.subjets,axis=2), axis=-1) == 0)
-                & (ak.all(events.FatJet.subjets[:,:,0:1].pt > 110., axis=-1))
-                & (ak.all(abs(events.FatJet.subjets[:,:,0:1].eta) < 2.4, axis=-1))
-                & (ak.all(events.FatJet.subjets[:,:,0:1].btagDeepB > 0.1, axis=-1))
+                #& (ak.is_none(ak.firsts(events.FatJet.subjets,axis=2), axis=-1) == 0)
+                #& (ak.all(events.FatJet.subjets[:,:,0:1].pt > 110., axis=-1))
+                #& (ak.all(abs(events.FatJet.subjets[:,:,0:1].eta) < 2.4, axis=-1))
+                #& (ak.all(events.FatJet.subjets[:,:,0:1].btagDeepB > 0.1, axis=-1))
                 #subjet2
-                & (ak.is_none(ak.firsts(events.FatJet.subjets[:,:,1:2],axis=2), axis=-1) == 0)
-                & (ak.all(events.FatJet.subjets[:,:,1:2].pt > 30., axis=-1))
-                & (ak.all(abs(events.FatJet.subjets[:,:,1:2].eta) < 2.4, axis=-1))
-                & (ak.all(events.FatJet.subjets[:,:,1:2].btagDeepB > 0.1, axis=-1))
+                #& (ak.is_none(ak.firsts(events.FatJet.subjets[:,:,1:2],axis=2), axis=-1) == 0)
+                #& (ak.all(events.FatJet.subjets[:,:,1:2].pt > 30., axis=-1))
+                #& (ak.all(abs(events.FatJet.subjets[:,:,1:2].eta) < 2.4, axis=-1))
+                #& (ak.all(events.FatJet.subjets[:,:,1:2].btagDeepB > 0.1, axis=-1))
                 )
         return events.FatJet[mask]
 
     def selectMuons(self, events):
-        mask = ((events.Muon.pt >25)
+
+        events['Muon'] = ak.with_field(
+            events.Muon, events.Jet[events.Muon.jetIdx].mask[events.Muon.jetIdx>=0], 'ak4jet'
+        )
+        events['Muon'] = ak.with_field(
+            events.Muon, ak.local_index(events.Muon, axis=1), 'idx'
+        )
+        mask = ((events.Muon.pt >10)
                 & (abs(events.Muon.eta) < 2.4)
                 & (events.Muon.dxy < 0.05)
                 & (events.Muon.dz < 0.1)
@@ -69,16 +80,23 @@ class ObjectSelection:
         return events.Muon[mask]
 
     def selectElectrons(self, events):
-        mask = ((events.Electron.pt > 30)
-                & (abs(events.Electron.eta) < 2.3)
+
+        events['Electron'] = ak.with_field(
+            events.Electron, events.Jet[events.Electron.jetIdx].mask[events.Electron.jetIdx>=0], 'ak4jet'
+        )
+        events['Electron'] = ak.with_field(
+            events.Electron, ak.local_index(events.Electron, axis=1), 'idx'
+            )
+        mask = ((events.Electron.pt > 10)
+                & (abs(events.Electron.eta) < 2.5)
                 & (events.Electron.dxy < 0.05)
                 & (events.Electron.dz < 0.1)
                 & (events.Electron.miniPFRelIso_all < 0.4)
                 & (events.Electron.sip3d <8)
                 & (events.Electron.mvaFall17V2noIso_WP90)
                 & (events.Electron.mvaTTH >= -0.6)
+                & (events.Electron.convVeto)
         )
-
         return events.Electron[mask]
 
     def selectak4Jets(self, events):
